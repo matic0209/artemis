@@ -17,3 +17,7 @@ anyhow = "1.0.70"
 tracing = "0.1.37"
 tracing-subscriber = "0.3.16"
 clap = { version = "4.2.5", features = ["derive"] }
+alloy-primitives = { workspace = true }
+alloy-provider = { workspace = true }
+alloy-transport-ws = { workspace = true }
+alloy-network = { workspace = true }
