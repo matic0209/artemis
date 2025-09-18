@@ -1,7 +1,7 @@
 use crate::types::Executor;
 use anyhow::Result;
 use async_trait::async_trait;
-use ethers::signers::Signer;
+use crate::eth::Signer;
 use jsonrpsee::http_client::{
     transport::{self},
     HttpClientBuilder,

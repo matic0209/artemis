@@ -37,3 +37,5 @@ pub mod executors;
 pub mod types;
 /// This module contains utilities for working with Artemis.
 pub mod utilities;
+/// This module provides an SDK adapter layer (ethers by default, alloy behind a feature).
+pub mod eth;

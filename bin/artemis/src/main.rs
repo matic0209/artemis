@@ -1,15 +1,14 @@
 use anyhow::Result;
 use clap::Parser;
-use ethers::types::H160;
+use artemis_core::eth::Address;
 use opensea_v2::client::{OpenSeaApiConfig, OpenSeaV2Client};
 
-use ethers::prelude::MiddlewareBuilder;
-use ethers::providers::{Provider, Ws};
+use artemis_core::eth::{helpers, MiddlewareBuilder};
 
 use artemis_core::collectors::block_collector::BlockCollector;
 use artemis_core::collectors::opensea_order_collector::OpenseaOrderCollector;
 use artemis_core::executors::mempool_executor::MempoolExecutor;
-use ethers::signers::{LocalWallet, Signer};
+use artemis_core::eth::{LocalWallet, Signer};
 use opensea_sudo_arb::strategy::OpenseaSudoArb;
 use opensea_sudo_arb::types::{Action, Config, Event};
 use tracing::{info, Level};
@@ -58,13 +57,22 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    // Set up ethers provider.
-    let ws = Ws::connect(args.wss).await?;
-    let provider = Provider::new(ws);
+    // sdk-alloy: prepare provider and signer using alloy helpers (not yet wired into engine)
+    #[cfg(feature = "sdk-alloy")]
+    {
+        use artemis_core::eth::alloy_support;
+        let _provider = alloy_support::helpers::create_ws_provider(&args.wss).await?;
+        let _signer = alloy_support::helpers::parse_local_wallet(&args.private_key).unwrap();
+        let _attached = alloy_support::helpers::attach_signer(_provider, _signer);
+        let _ = _attached; // silence unused
+        // simple read to ensure provider works
+        let _bn = alloy_support::helpers::get_block_number(&_attached.0).await?;
+    }
 
-    let wallet: LocalWallet = args.private_key.parse().unwrap();
+    // Set up provider via adapter helpers.
+    let provider = helpers::create_ws_provider(&args.wss).await?;
+    let wallet: LocalWallet = helpers::parse_local_wallet(&args.private_key).unwrap();
     let address = wallet.address();
-
     let provider = Arc::new(provider.nonce_manager(address).with_signer(wallet));
 
     // Set up opensea client.
@@ -88,7 +96,7 @@ async fn main() -> Result<()> {
 
     // Set up opensea sudo arb strategy.
     let config = Config {
-        arb_contract_address: H160::from_str(&args.arb_contract_address)?,
+        arb_contract_address: Address::from_str(&args.arb_contract_address)?,
         bid_percentage: args.bid_percentage,
     };
     let strategy = OpenseaSudoArb::new(Arc::new(provider.clone()), opensea_client, config);

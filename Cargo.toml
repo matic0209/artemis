@@ -8,18 +8,24 @@ members = [
     "crates/clients/*", 
     "examples/*",
 ]
+exclude = [
+    "crates/clients/chainbound",
+]
 
 default-members = ["bin/artemis", "bin/cli"]
+resolver = "2"
 
 [workspace.dependencies]
 ## eth
 ethers = { version = "2", features = ["ws", "rustls"]}
 ethers-signers = "2.0"
-
+serde = { version = "1.0.205", features = ["derive"] }
 
 [profile.release]
 panic = 'abort'
 
 [profile.dev]
 panic = 'abort'
+
+## note: remove alloy patches; rely on fiber compat
 

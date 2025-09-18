@@ -5,6 +5,10 @@
 /// This executor submits transactions to the flashbots relay.
 pub mod flashbots_executor;
 
+/// Alloy-based Flashbots executor (feature-gated)
+#[cfg(feature = "sdk-alloy")]
+pub mod flashbots_alloy_executor;
+
 /// This executor submits transactions to the public mempool.
 pub mod mempool_executor;
 

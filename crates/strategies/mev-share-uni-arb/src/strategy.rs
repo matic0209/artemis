@@ -7,12 +7,13 @@ use async_trait::async_trait;
 
 use anyhow::Result;
 use artemis_core::types::Strategy;
+use artemis_core::eth::{Signer};
+use artemis_core::eth::{Middleware};
+use artemis_core::eth::{Address, Hash as H256};
+use artemis_core::eth::{Address as H160, U256};
 
-use ethers::signers::Signer;
-
-use ethers::providers::Middleware;
-use ethers::types::{Address, H256};
-use ethers::types::{H160, U256};
+#[cfg(feature = "sdk-alloy")]
+use artemis_core::eth::alloy_support as alloy;
 use mev_share::rpc::{BundleItem, Inclusion, SendBundleRequest};
 use tracing::info;
 

@@ -3,7 +3,8 @@ use artemis_core::{
     executors::mempool_executor::SubmitTxToMempool,
 };
 use bindings::zone_interface::{AdditionalRecipient, BasicOrderParameters};
-use ethers::types::{Chain, H160, H256};
+use ethers::types::Chain;
+use artemis_core::eth::{Address as H160, Hash as H256};
 use opensea_v2::types::{
     FulfillListingRequest, FulfillListingResponse, Fulfiller, Listing, ProtocolVersion,
 };

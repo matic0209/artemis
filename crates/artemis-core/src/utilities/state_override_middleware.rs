@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use ethers::{
-    core::types::{transaction::eip2718::TypedTransaction, BlockId},
-    providers::{spoof, CallBuilder, Middleware, MiddlewareError, RawCall},
-    types::{Address, Bytes},
+    providers::{spoof, CallBuilder, Middleware as EthersMiddleware, MiddlewareError, RawCall},
 };
 use thiserror::Error;
+
+use crate::eth::{Address, BlockId, Bytes, Middleware, TxRequest};
 
 /// This custom middleware performs an ephemeral state override prior to executoring calls.
 #[derive(Debug)]
@@ -45,7 +45,7 @@ where
     /// Performs a call with the state override.
     async fn call(
         &self,
-        tx: &TypedTransaction,
+        tx: &TxRequest,
         block: Option<BlockId>,
     ) -> Result<Bytes, Self::Error> {
         let call_builder = CallBuilder::new(self.inner.provider(), tx);

@@ -17,9 +17,10 @@ use artemis_core::collectors::opensea_order_collector::OpenseaOrder;
 use artemis_core::executors::mempool_executor::{GasBidInfo, SubmitTxToMempool};
 use artemis_core::types::Strategy;
 use artemis_core::utilities::state_override_middleware::StateOverrideMiddleware;
-use ethers::providers::Middleware;
-use ethers::types::{Filter, H256};
-use ethers::types::{H160, U256};
+use artemis_core::eth::{Middleware, Filter, Hash as H256, Address as H160, U256};
+
+#[cfg(feature = "sdk-alloy")]
+use artemis_core::eth::alloy_support as alloy;
 use opensea_stream::schema::Chain;
 use opensea_v2::client::OpenSeaV2Client;
 

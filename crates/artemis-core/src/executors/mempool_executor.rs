@@ -6,10 +6,7 @@ use std::{
 use crate::types::Executor;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use ethers::{
-    providers::Middleware,
-    types::{transaction::eip2718::TypedTransaction, U256},
-};
+use crate::eth::{Middleware, TxRequest, U256};
 
 /// An executor that sends transactions to the mempool.
 pub struct MempoolExecutor<M> {
@@ -28,7 +25,7 @@ pub struct GasBidInfo {
 
 #[derive(Debug, Clone)]
 pub struct SubmitTxToMempool {
-    pub tx: TypedTransaction,
+    pub tx: TxRequest,
     pub gas_bid_info: Option<GasBidInfo>,
 }
 

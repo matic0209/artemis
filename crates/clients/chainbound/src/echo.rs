@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use ethers::{providers::Middleware, signers::Signer};
+use artemis_core::eth::{Middleware, Signer};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client,

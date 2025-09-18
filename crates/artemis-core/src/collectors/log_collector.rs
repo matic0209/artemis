@@ -1,11 +1,8 @@
 use crate::types::{Collector, CollectorStream};
 use anyhow::Result;
 use async_trait::async_trait;
-use ethers::{
-    prelude::Middleware,
-    providers::PubsubClient,
-    types::{Filter, Log},
-};
+use crate::eth::{Middleware, PubsubClient};
+use ethers::types::{Filter, Log};
 use std::sync::Arc;
 use tokio_stream::StreamExt;
 

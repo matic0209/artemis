@@ -18,6 +18,9 @@ csv = "1.1"
 serde = { version = "1", features = ["derive"] }
 mev-share-bindings = { path = "./bindings" }
 
+[features]
+default = []
+sdk-alloy = []
 
 
 

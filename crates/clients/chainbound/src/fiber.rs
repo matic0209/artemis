@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use ethers::types::Transaction;
+use artemis_core::eth::Transaction;
 use fiber::{
     eth::{CompactBeaconBlock, ExecutionPayload, ExecutionPayloadHeader},
     Client,
@@ -30,7 +30,7 @@ pub enum StreamType {
     /// transaction objects. This stream is (on avg) 20-30ms faster than the [StreamType::ExecutionPayloads].
     ExecutionHeaders,
     /// Subscribe to new [ExecutionPayload]s, which contain both the block header and the full
-    /// transaction objects as [ethers::types::Transaction]s.
+    /// transaction objects as [Transaction]s.
     ExecutionPayloads,
     /// Subscribe to new [CompactBeaconBlock]s, which contain the consensus-layer block info.
     /// Refer to the official [Fiber-rs client types](https://github.com/chainbound/fiber-rs/blob/c2f28b28250d52ebb6591d7517e55ead98c041d0/src/eth.rs#L173)

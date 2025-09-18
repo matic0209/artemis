@@ -12,7 +12,7 @@ pub fn generate_strategy(name: &str) -> TokenStream {
 
         use anyhow::Result;
         use artemis_core::types::Strategy;
-        use ethers::providers::Middleware;
+        use artemis_core::eth::Middleware;
 
         use super::types::{Action, Config, Event};
 

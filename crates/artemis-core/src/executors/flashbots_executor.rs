@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use ethers::{
-    providers::Middleware, signers::Signer, types::transaction::eip2718::TypedTransaction,
-};
+use crate::eth::{Middleware, Signer, TxRequest};
 use ethers_flashbots::{BundleRequest, FlashbotsMiddleware};
 use reqwest::Url;
 use tracing::error;
@@ -21,7 +19,7 @@ pub struct FlashbotsExecutor<M, S> {
 }
 
 /// A bundle of transactions to send to the Flashbots relay.
-pub type FlashbotsBundle = Vec<TypedTransaction>;
+pub type FlashbotsBundle = Vec<TxRequest>;
 
 impl<M: Middleware, S: Signer> FlashbotsExecutor<M, S> {
     pub fn new(client: Arc<M>, tx_signer: S, relay_signer: S, relay_url: impl Into<Url>) -> Self {

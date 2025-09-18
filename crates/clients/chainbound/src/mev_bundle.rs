@@ -1,4 +1,4 @@
-use ethers::types::TransactionRequest;
+use artemis_core::eth::TxRequest as TransactionRequest;
 use serde::{Deserialize, Serialize};
 
 /// An UUIDv4 identifier, useful for cancelling/replacing bundles.

@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
-use ethers::types::{Bytes, Chain, H160, H256, U256};
+use ethers::types::Chain;
+use artemis_core::eth::{Bytes, Address as H160, Hash as H256, U256};
 use serde::{de, Deserialize, Serialize, Serializer};
 use thiserror::Error;
 

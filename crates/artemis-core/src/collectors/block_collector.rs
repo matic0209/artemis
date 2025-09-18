@@ -1,11 +1,10 @@
 use crate::types::{Collector, CollectorStream};
 use anyhow::Result;
 use async_trait::async_trait;
-use ethers::{
-    prelude::Middleware,
-    providers::PubsubClient,
-    types::{H256, U64},
-};
+use crate::eth::{Middleware, PubsubClient, U64};
+use crate::eth::Hash as H256;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 use std::sync::Arc;
 use tokio_stream::StreamExt;
 
@@ -33,16 +32,24 @@ impl<M> BlockCollector<M> {
 #[async_trait]
 impl<M> Collector<NewBlock> for BlockCollector<M>
 where
-    M: Middleware,
+    M: Middleware + 'static,
     M::Provider: PubsubClient,
     M::Error: 'static,
 {
     async fn get_event_stream(&self) -> Result<CollectorStream<'_, NewBlock>> {
-        let stream = self.provider.subscribe_blocks().await?;
-        let stream = stream.filter_map(|block| match block.hash {
-            Some(hash) => block.number.map(|number| NewBlock { hash, number }),
-            None => None,
+        let (tx, rx) = mpsc::channel::<NewBlock>(1024);
+        let provider = self.provider.clone();
+        tokio::spawn(async move {
+            if let Ok(mut stream) = provider.subscribe_blocks().await {
+                while let Some(block) = stream.next().await {
+                    if let (Some(hash), Some(number)) = (block.hash, block.number) {
+                        if tx.send(NewBlock { hash, number }).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
         });
-        Ok(Box::pin(stream))
+        Ok(Box::pin(ReceiverStream::new(rx)))
     }
 }

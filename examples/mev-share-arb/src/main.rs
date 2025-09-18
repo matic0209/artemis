@@ -8,12 +8,7 @@ use artemis_core::{
     types::{CollectorMap, ExecutorMap},
 };
 use clap::Parser;
-use ethers::{
-    prelude::MiddlewareBuilder,
-    providers::{Provider, Ws},
-    signers::{LocalWallet, Signer},
-    types::Address,
-};
+use artemis_core::eth::{helpers, MiddlewareBuilder, LocalWallet, Signer, Address};
 use mev_share_uni_arb::{
     strategy::MevShareUniArb,
     types::{Action, Event},
@@ -51,13 +46,21 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
 
+    // sdk-alloy: prepare provider and signer using alloy helpers (not yet wired into engine)
+    #[cfg(feature = "sdk-alloy")]
+    {
+        use artemis_core::eth::alloy_support;
+        let _provider = alloy_support::helpers::create_ws_provider(&args.wss).await?;
+        let _signer = alloy_support::helpers::parse_local_wallet(&args.private_key).unwrap();
+        let _attached = alloy_support::helpers::attach_signer(_provider, _signer);
+        let _ = _attached;
+        let _bn = alloy_support::helpers::get_block_number(&_attached.0).await?;
+    }
+
     //  Set up providers and signers.
-    let ws = Ws::connect(args.wss).await?;
-    let provider = Provider::new(ws);
-
-    let wallet: LocalWallet = args.private_key.parse().unwrap();
+    let provider = helpers::create_ws_provider(&args.wss).await?;
+    let wallet: LocalWallet = helpers::parse_local_wallet(&args.private_key).unwrap();
     let address = wallet.address();
-
     let provider = Arc::new(provider.nonce_manager(address).with_signer(wallet.clone()));
     let fb_signer: LocalWallet = args.flashbots_signer.parse().unwrap();
 

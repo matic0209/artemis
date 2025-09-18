@@ -1,4 +1,4 @@
-use ethers::types::H160;
+use artemis_core::eth::Address as H160;
 
 use mev_share::{rpc::SendBundleRequest, sse};
 

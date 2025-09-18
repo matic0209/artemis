@@ -1,8 +1,8 @@
 use ethers::{
     contract::EthEvent,
     prelude::Lazy,
-    types::{Address, TxHash},
 };
+use artemis_core::eth::{Address, Hash as TxHash};
 
 /// Block number at which the sudo factory was deployed.
 pub const FACTORY_DEPLOYMENT_BLOCK: u64 = 14650730;

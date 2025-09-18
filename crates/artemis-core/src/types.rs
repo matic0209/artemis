@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use ethers::types::Transaction;
+use crate::eth::Transaction;
 use std::pin::Pin;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
