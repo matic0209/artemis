@@ -1,0 +1,741 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "contract LSSVMPairEnumerableETH",
+        "name": "_enumerableETHTemplate",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "contract LSSVMPairMissingEnumerableETH",
+        "name": "_missingEnumerableETHTemplate",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "contract LSSVMPairEnumerableERC20",
+        "name": "_enumerableERC20Template",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "contract LSSVMPairMissingEnumerableERC20",
+        "name": "_missingEnumerableERC20Template",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "address payable",
+        "name": "_protocolFeeRecipient",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "uint256",
+        "name": "_protocolFeeMultiplier",
+        "type": "uint256",
+        "components": []
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor",
+    "outputs": []
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract ICurve",
+        "name": "bondingCurve",
+        "type": "address",
+        "components": [],
+        "indexed": false
+      },
+      {
+        "internalType": "bool",
+        "name": "isAllowed",
+        "type": "bool",
+        "components": [],
+        "indexed": false
+      }
+    ],
+    "type": "event",
+    "name": "BondingCurveStatusUpdate",
+    "outputs": [],
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "target",
+        "type": "address",
+        "components": [],
+        "indexed": false
+      },
+      {
+        "internalType": "bool",
+        "name": "isAllowed",
+        "type": "bool",
+        "components": [],
+        "indexed": false
+      }
+    ],
+    "type": "event",
+    "name": "CallTargetStatusUpdate",
+    "outputs": [],
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "poolAddress",
+        "type": "address",
+        "components": [],
+        "indexed": false
+      }
+    ],
+    "type": "event",
+    "name": "NFTDeposit",
+    "outputs": [],
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "poolAddress",
+        "type": "address",
+        "components": [],
+        "indexed": false
+      }
+    ],
+    "type": "event",
+    "name": "NewPair",
+    "outputs": [],
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address",
+        "components": [],
+        "indexed": true
+      },
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address",
+        "components": [],
+        "indexed": true
+      }
+    ],
+    "type": "event",
+    "name": "OwnershipTransferred",
+    "outputs": [],
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "newMultiplier",
+        "type": "uint256",
+        "components": [],
+        "indexed": false
+      }
+    ],
+    "type": "event",
+    "name": "ProtocolFeeMultiplierUpdate",
+    "outputs": [],
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "recipientAddress",
+        "type": "address",
+        "components": [],
+        "indexed": false
+      }
+    ],
+    "type": "event",
+    "name": "ProtocolFeeRecipientUpdate",
+    "outputs": [],
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract LSSVMRouter",
+        "name": "router",
+        "type": "address",
+        "components": [],
+        "indexed": false
+      },
+      {
+        "internalType": "bool",
+        "name": "isAllowed",
+        "type": "bool",
+        "components": [],
+        "indexed": false
+      }
+    ],
+    "type": "event",
+    "name": "RouterStatusUpdate",
+    "outputs": [],
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "poolAddress",
+        "type": "address",
+        "components": [],
+        "indexed": false
+      }
+    ],
+    "type": "event",
+    "name": "TokenDeposit",
+    "outputs": [],
+    "anonymous": false
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract ICurve",
+        "name": "",
+        "type": "address",
+        "components": []
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "bondingCurveAllowed",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool",
+        "components": []
+      }
+    ]
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address",
+        "components": []
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "callAllowed",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool",
+        "components": []
+      }
+    ]
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_protocolFeeMultiplier",
+        "type": "uint256",
+        "components": []
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "changeProtocolFeeMultiplier",
+    "outputs": []
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address payable",
+        "name": "_protocolFeeRecipient",
+        "type": "address",
+        "components": []
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "changeProtocolFeeRecipient",
+    "outputs": []
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "struct LSSVMPairFactory.CreateERC20PairParams",
+        "name": "params",
+        "type": "tuple",
+        "components": [
+          {
+            "internalType": "contract ERC20",
+            "name": "token",
+            "type": "address",
+            "components": []
+          },
+          {
+            "internalType": "contract IERC721",
+            "name": "nft",
+            "type": "address",
+            "components": []
+          },
+          {
+            "internalType": "contract ICurve",
+            "name": "bondingCurve",
+            "type": "address",
+            "components": []
+          },
+          {
+            "internalType": "address payable",
+            "name": "assetRecipient",
+            "type": "address",
+            "components": []
+          },
+          {
+            "internalType": "enum LSSVMPair.PoolType",
+            "name": "poolType",
+            "type": "uint8",
+            "components": []
+          },
+          {
+            "internalType": "uint128",
+            "name": "delta",
+            "type": "uint128",
+            "components": []
+          },
+          {
+            "internalType": "uint96",
+            "name": "fee",
+            "type": "uint96",
+            "components": []
+          },
+          {
+            "internalType": "uint128",
+            "name": "spotPrice",
+            "type": "uint128",
+            "components": []
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "initialNFTIDs",
+            "type": "uint256[]",
+            "components": []
+          },
+          {
+            "internalType": "uint256",
+            "name": "initialTokenBalance",
+            "type": "uint256",
+            "components": []
+          }
+        ]
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "createPairERC20",
+    "outputs": [
+      {
+        "internalType": "contract LSSVMPairERC20",
+        "name": "pair",
+        "type": "address",
+        "components": []
+      }
+    ]
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IERC721",
+        "name": "_nft",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "contract ICurve",
+        "name": "_bondingCurve",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "address payable",
+        "name": "_assetRecipient",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "enum LSSVMPair.PoolType",
+        "name": "_poolType",
+        "type": "uint8",
+        "components": []
+      },
+      {
+        "internalType": "uint128",
+        "name": "_delta",
+        "type": "uint128",
+        "components": []
+      },
+      {
+        "internalType": "uint96",
+        "name": "_fee",
+        "type": "uint96",
+        "components": []
+      },
+      {
+        "internalType": "uint128",
+        "name": "_spotPrice",
+        "type": "uint128",
+        "components": []
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "_initialNFTIDs",
+        "type": "uint256[]",
+        "components": []
+      }
+    ],
+    "stateMutability": "payable",
+    "type": "function",
+    "name": "createPairETH",
+    "outputs": [
+      {
+        "internalType": "contract LSSVMPairETH",
+        "name": "pair",
+        "type": "address",
+        "components": []
+      }
+    ]
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract ERC20",
+        "name": "token",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256",
+        "components": []
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "depositERC20",
+    "outputs": []
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IERC721",
+        "name": "_nft",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "ids",
+        "type": "uint256[]",
+        "components": []
+      },
+      {
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address",
+        "components": []
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "depositNFTs",
+    "outputs": []
+  },
+  {
+    "inputs": [],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "enumerableERC20Template",
+    "outputs": [
+      {
+        "internalType": "contract LSSVMPairEnumerableERC20",
+        "name": "",
+        "type": "address",
+        "components": []
+      }
+    ]
+  },
+  {
+    "inputs": [],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "enumerableETHTemplate",
+    "outputs": [
+      {
+        "internalType": "contract LSSVMPairEnumerableETH",
+        "name": "",
+        "type": "address",
+        "components": []
+      }
+    ]
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "potentialPair",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "enum ILSSVMPairFactoryLike.PairVariant",
+        "name": "variant",
+        "type": "uint8",
+        "components": []
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "isPair",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool",
+        "components": []
+      }
+    ]
+  },
+  {
+    "inputs": [],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "missingEnumerableERC20Template",
+    "outputs": [
+      {
+        "internalType": "contract LSSVMPairMissingEnumerableERC20",
+        "name": "",
+        "type": "address",
+        "components": []
+      }
+    ]
+  },
+  {
+    "inputs": [],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "missingEnumerableETHTemplate",
+    "outputs": [
+      {
+        "internalType": "contract LSSVMPairMissingEnumerableETH",
+        "name": "",
+        "type": "address",
+        "components": []
+      }
+    ]
+  },
+  {
+    "inputs": [],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address",
+        "components": []
+      }
+    ]
+  },
+  {
+    "inputs": [],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "protocolFeeMultiplier",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256",
+        "components": []
+      }
+    ]
+  },
+  {
+    "inputs": [],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "protocolFeeRecipient",
+    "outputs": [
+      {
+        "internalType": "address payable",
+        "name": "",
+        "type": "address",
+        "components": []
+      }
+    ]
+  },
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "renounceOwnership",
+    "outputs": []
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract LSSVMRouter",
+        "name": "",
+        "type": "address",
+        "components": []
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "routerStatus",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "allowed",
+        "type": "bool",
+        "components": []
+      },
+      {
+        "internalType": "bool",
+        "name": "wasEverAllowed",
+        "type": "bool",
+        "components": []
+      }
+    ]
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract ICurve",
+        "name": "bondingCurve",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "bool",
+        "name": "isAllowed",
+        "type": "bool",
+        "components": []
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "setBondingCurveAllowed",
+    "outputs": []
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address payable",
+        "name": "target",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "bool",
+        "name": "isAllowed",
+        "type": "bool",
+        "components": []
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "setCallAllowed",
+    "outputs": []
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract LSSVMRouter",
+        "name": "_router",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "bool",
+        "name": "isAllowed",
+        "type": "bool",
+        "components": []
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "setRouterAllowed",
+    "outputs": []
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address",
+        "components": []
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "transferOwnership",
+    "outputs": []
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract ERC20",
+        "name": "token",
+        "type": "address",
+        "components": []
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256",
+        "components": []
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "withdrawERC20ProtocolFees",
+    "outputs": []
+  },
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "withdrawETHProtocolFees",
+    "outputs": []
+  },
+  {
+    "inputs": [],
+    "stateMutability": "payable",
+    "type": "receive",
+    "outputs": []
+  }
+]

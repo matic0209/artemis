@@ -1,19 +1,25 @@
-use anyhow::Result;
-use clap::Parser;
+use anyhow::{Context, Result};
 use artemis_core::eth::Address;
+use clap::Parser;
 use opensea_v2::client::{OpenSeaApiConfig, OpenSeaV2Client};
 
 use artemis_core::eth::{helpers, MiddlewareBuilder};
 
 use artemis_core::collectors::block_collector::BlockCollector;
 use artemis_core::collectors::opensea_order_collector::OpenseaOrderCollector;
-use artemis_core::executors::mempool_executor::MempoolExecutor;
 use artemis_core::eth::{LocalWallet, Signer};
+use artemis_core::executors::mempool_executor::MempoolExecutor;
+use hyper::service::{make_service_fn, service_fn};
+use hyper::{Body, Response, Server, StatusCode};
+use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use opensea_sudo_arb::strategy::OpenseaSudoArb;
 use opensea_sudo_arb::types::{Action, Config, Event};
 use tracing::{info, Level};
 use tracing_subscriber::{filter, prelude::*};
 
+use std::convert::Infallible;
+use std::env;
+use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -55,6 +61,11 @@ async fn main() -> Result<()> {
         .with(filter)
         .init();
 
+    let metrics_handle = install_metrics_recorder()?;
+    let metrics_addr = metrics_bind_addr()?;
+    tokio::spawn(run_metrics_server(metrics_handle, metrics_addr));
+    info!("metrics_server" = %metrics_addr, "metrics server started");
+
     let args = Args::parse();
 
     // sdk-alloy: prepare provider and signer using alloy helpers (not yet wired into engine)
@@ -65,7 +76,7 @@ async fn main() -> Result<()> {
         let _signer = alloy_support::helpers::parse_local_wallet(&args.private_key).unwrap();
         let _attached = alloy_support::helpers::attach_signer(_provider, _signer);
         let _ = _attached; // silence unused
-        // simple read to ensure provider works
+                           // simple read to ensure provider works
         let _bn = alloy_support::helpers::get_block_number(&_attached.0).await?;
     }
 
@@ -116,4 +127,47 @@ async fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn install_metrics_recorder() -> Result<PrometheusHandle> {
+    PrometheusBuilder::new()
+        .install_recorder()
+        .context("failed to install prometheus recorder")
+}
+
+fn metrics_bind_addr() -> Result<SocketAddr> {
+    let bind = env::var("ARTEMIS_METRICS_ADDR").unwrap_or_else(|_| "127.0.0.1:9898".to_string());
+    bind.parse::<SocketAddr>()
+        .context("invalid ARTEMIS_METRICS_ADDR value")
+}
+
+async fn run_metrics_server(handle: PrometheusHandle, addr: SocketAddr) {
+    let make_svc = make_service_fn(move |_conn| {
+        let handle = handle.clone();
+        async move {
+            Ok::<_, Infallible>(service_fn(move |req| {
+                let handle = handle.clone();
+                async move {
+                    let response = if req.uri().path() == "/metrics" {
+                        let body = handle.render();
+                        Response::builder()
+                            .status(StatusCode::OK)
+                            .header("Content-Type", "text/plain; version=0.0.4")
+                            .body(Body::from(body))
+                            .unwrap()
+                    } else {
+                        Response::builder()
+                            .status(StatusCode::NOT_FOUND)
+                            .body(Body::empty())
+                            .unwrap()
+                    };
+                    Ok::<_, Infallible>(response)
+                }
+            }))
+        }
+    });
+
+    if let Err(err) = Server::bind(&addr).serve(make_svc).await {
+        tracing::error!(error = %err, "metrics server failed");
+    }
 }

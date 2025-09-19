@@ -1,0 +1,51 @@
+[
+  {
+    "inputs": [
+      {"internalType": "address", "name": "v2Pair", "type": "address"},
+      {"internalType": "address", "name": "v3Pair", "type": "address"},
+      {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
+      {"internalType": "uint256", "name": "percentageToPayToCoinbase", "type": "uint256"}
+    ],
+    "name": "executeArb__WETH_token0",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType": "address", "name": "v2Pair", "type": "address"},
+      {"internalType": "address", "name": "v3Pair", "type": "address"},
+      {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
+      {"internalType": "uint256", "name": "percentageToPayToCoinbase", "type": "uint256"}
+    ],
+    "name": "executeArb__WETH_token1",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType": "int256", "name": "amount0Delta", "type": "int256"},
+      {"internalType": "int256", "name": "amount1Delta", "type": "int256"},
+      {"internalType": "bytes", "name": "_data", "type": "bytes"}
+    ],
+    "name": "uniswapV3SwapCallback",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "withdrawETHToOwner",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "withdrawWETHToOwner",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]

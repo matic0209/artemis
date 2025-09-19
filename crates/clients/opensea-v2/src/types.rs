@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
+use artemis_core::eth::{Address as H160, Bytes, Hash as H256, U256};
 use ethers::types::Chain;
-use artemis_core::eth::{Bytes, Address as H160, Hash as H256, U256};
 use serde::{de, Deserialize, Serialize, Serializer};
 use thiserror::Error;
 
@@ -155,5 +155,5 @@ where
     D: de::Deserializer<'de>,
 {
     let val = String::deserialize(deserializer)?;
-    U256::from_dec_str(&val).map_err(de::Error::custom)
+    U256::from_str(&val).map_err(de::Error::custom)
 }

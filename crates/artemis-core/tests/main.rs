@@ -1,6 +1,9 @@
+#![cfg(feature = "sdk-ethers")]
+
 use artemis_core::{
     collectors::{block_collector::BlockCollector, mempool_collector::MempoolCollector},
-    executors::mempool_executor::{MempoolExecutor, SubmitTxToMempool},
+    executors::mempool_executor::MempoolExecutor,
+    executors::mempool_types::SubmitTxToMempool,
     types::{Collector, Executor},
 };
 use ethers::providers::StreamExt;

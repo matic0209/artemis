@@ -32,3 +32,13 @@ fmt:
 clippy: 
     cargo clippy --all --all-features
 
+perf-smoke:
+    cargo test --package artemis-core -- --nocapture --test-threads=1
+
+bench:
+    if ! cargo bench --workspace; then \
+        echo "warning: cargo bench failed (no benchmarks configured yet)"; \
+    fi
+
+soak:
+    cargo test --workspace --release -- --ignored --test-threads=1

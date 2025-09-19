@@ -6,8 +6,11 @@ use opensea_stream::{
     schema::{self, ItemListedData},
     subscribe_to, Collection, Network,
 };
-use tokio_stream::wrappers::BroadcastStream;
-use tokio_stream::StreamExt;
+use tokio::sync::mpsc;
+use tokio_stream::{
+    wrappers::{BroadcastStream, ReceiverStream},
+    StreamExt,
+};
 
 /// A collector that listens for new orders on OpenSea, and generates a stream of
 /// [events](OpenseaOrder) which contain the order.
@@ -32,23 +35,61 @@ pub struct OpenseaOrder {
 #[async_trait]
 impl Collector<OpenseaOrder> for OpenseaOrderCollector {
     async fn get_event_stream(&self) -> Result<CollectorStream<'_, OpenseaOrder>> {
-        let mut client = client(Network::Mainnet, &self.api_key).await;
+        let (tx, rx) = mpsc::channel::<OpenseaOrder>(512);
+        let api_key = self.api_key.clone();
 
-        let collection = Collection::All;
+        tokio::spawn(async move {
+            let collection = Collection::All;
+            let mut backoff_secs = 1u64;
 
-        let (_, subscription) = subscribe_to(&mut client, collection).await?;
+            loop {
+                let mut client = client(Network::Mainnet, &api_key).await;
 
-        let stream = BroadcastStream::new(subscription);
+                let subscription = match subscribe_to(&mut client, collection.clone()).await {
+                    Ok((_, subscription)) => {
+                        backoff_secs = 1;
+                        subscription
+                    }
+                    Err(err) => {
+                        let counter =
+                            metrics::counter!("artemis.collectors.opensea.subscribe_errors");
+                        counter.increment(1);
+                        tracing::warn!("opensea subscribe error: {}", err);
+                        tokio::time::sleep(tokio::time::Duration::from_secs(backoff_secs)).await;
+                        backoff_secs = (backoff_secs * 2).min(60);
+                        continue;
+                    }
+                };
 
-        let stream = stream.filter_map(|event| {
-            let event = event.ok()?.into_custom_payload()?;
-            if let schema::Payload::ItemListed(listing) = event.payload {
-                Some(OpenseaOrder { listing })
-            } else {
-                None
+                let mut stream = BroadcastStream::new(subscription);
+
+                while let Some(event) = stream.next().await {
+                    match event {
+                        Ok(event) => {
+                            if let Some(payload) = event.into_custom_payload() {
+                                if let schema::Payload::ItemListed(listing) = payload.payload {
+                                    if tx.send(OpenseaOrder { listing }).await.is_err() {
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            let counter =
+                                metrics::counter!("artemis.collectors.opensea.stream_errors");
+                            counter.increment(1);
+                            tracing::warn!("opensea stream error: {}", err);
+                            break;
+                        }
+                    }
+                }
+
+                // exponential backoff before reconnecting
+                tokio::time::sleep(tokio::time::Duration::from_secs(backoff_secs)).await;
+                backoff_secs = (backoff_secs * 2).min(60);
             }
         });
 
-        Ok(Box::pin(stream))
+        Ok(Box::pin(ReceiverStream::new(rx)))
     }
 }

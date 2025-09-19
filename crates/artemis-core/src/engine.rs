@@ -98,25 +98,46 @@ where
             });
         }
 
-        // Spawn strategies in separate threads.
+        // Spawn strategies in separate tasks.
         for mut strategy in self.strategies {
             let mut event_receiver = event_sender.subscribe();
             let action_sender = action_sender.clone();
-            strategy.sync_state().await?;
 
             set.spawn(async move {
+                info!("syncing strategy state...");
+                if let Err(err) = strategy.sync_state().await {
+                    error!("strategy failed to sync state: {}", err);
+                    return;
+                }
                 info!("starting strategy... ");
                 loop {
                     match event_receiver.recv().await {
                         Ok(event) => {
+                            let timer = tokio::time::Instant::now();
                             for action in strategy.process_event(event).await {
                                 match action_sender.send(action) {
-                                    Ok(_) => {}
-                                    Err(e) => error!("error sending action: {}", e),
+                                    Ok(_) => {
+                                        let gauge =
+                                            metrics::gauge!("artemis.engine.action_queue_depth");
+                                        gauge.set(action_sender.len() as f64);
+                                    }
+                                    Err(e) => {
+                                        let counter =
+                                            metrics::counter!("artemis.engine.action_send_errors");
+                                        counter.increment(1);
+                                        error!("error sending action: {}", e);
+                                    }
                                 }
                             }
+                            let histogram =
+                                metrics::histogram!("artemis.engine.strategy_process_event_ms");
+                            histogram.record(timer.elapsed().as_secs_f64() * 1_000.0);
                         }
-                        Err(e) => error!("error receiving event: {}", e),
+                        Err(e) => {
+                            let counter = metrics::counter!("artemis.engine.strategy_recv_errors");
+                            counter.increment(1);
+                            error!("error receiving event: {}", e);
+                        }
                     }
                 }
             });
@@ -127,11 +148,26 @@ where
             let event_sender = event_sender.clone();
             set.spawn(async move {
                 info!("starting collector... ");
-                let mut event_stream = collector.get_event_stream().await.unwrap();
+                let mut event_stream = match collector.get_event_stream().await {
+                    Ok(stream) => stream,
+                    Err(err) => {
+                        let counter = metrics::counter!("artemis.engine.collector_start_errors");
+                        counter.increment(1);
+                        error!("failed to start collector stream: {}", err);
+                        return;
+                    }
+                };
                 while let Some(event) = event_stream.next().await {
                     match event_sender.send(event) {
-                        Ok(_) => {}
-                        Err(e) => error!("error sending event: {}", e),
+                        Ok(_) => {
+                            let gauge = metrics::gauge!("artemis.engine.event_queue_depth");
+                            gauge.set(event_sender.len() as f64);
+                        }
+                        Err(e) => {
+                            let counter = metrics::counter!("artemis.engine.collector_send_errors");
+                            counter.increment(1);
+                            error!("error sending event: {}", e);
+                        }
                     }
                 }
             });

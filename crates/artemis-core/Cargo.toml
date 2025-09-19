@@ -8,35 +8,47 @@ edition = "2021"
 [dependencies]
 
 ## eth
-ethers.workspace = true
+ethers = { workspace = true, optional = true }
 opensea-stream = { git = "https://github.com/FrankieIsLost/opensea-stream-rs"}
 mev-share = "0.1.4"
-ethers-flashbots = { git = "https://github.com/FrankieIsLost/ethers-flashbots", features = ["rustls"] }
+ethers-flashbots = { git = "https://github.com/FrankieIsLost/ethers-flashbots", features = ["rustls"], optional = true }
 
 ## async
 async-trait = "0.1.64"
-futures = "0.3"
-reqwest = { version = "0.11.14", default-features = false, features = ["rustls-tls"] }
+futures = { version = "0.3", optional = true }
+reqwest = { version = "0.11.14", default-features = false, features = ["rustls-tls"], optional = true }
 tokio = { version = "1.18", features = ["full"] }
 tokio-stream = { version = "0.1", features = ['sync'] }
-jsonrpsee = { version = "0.18", features = ["client", "async-client"] }
+jsonrpsee = { version = "0.18", features = ["client", "async-client"], optional = true }
 
 ## misc
 anyhow = "1.0.70"
-thiserror = "1.0.40"
+thiserror = { version = "1.0.40", optional = true }
 tracing = "0.1.37"
-tower = "0.4.13"
-alloy-provider = { version = "1", optional = true }
+tower = { version = "0.4.13", optional = true }
+metrics = "0.22"
+dashmap = "5"
+alloy-provider = { version = "1", optional = true, features = ["ws", "reqwest"] }
 alloy-transport-ws = { version = "1", optional = true }
 alloy-transport-http = { version = "1", optional = true }
+alloy-rpc-types-eth = { version = "1", optional = true }
 alloy-signer-local = { version = "1", optional = true }
-alloy-primitives = { version = "0.8", optional = true }
+alloy-primitives = { version = "1", optional = true }
 alloy-rpc-types = { version = "1", optional = true }
 alloy-mev = { version = "1.0.0", optional = true }
+alloy = { version = "1", optional = true }
 
 [features]
 default = ["sdk-ethers", "sdk-alloy"]
-sdk-ethers = []
+sdk-ethers = [
+    "dep:ethers",
+    "dep:ethers-flashbots",
+    "dep:futures",
+    "dep:reqwest",
+    "dep:jsonrpsee",
+    "dep:thiserror",
+    "dep:tower",
+]
 sdk-alloy = [
     "dep:alloy-provider",
     "dep:alloy-transport-ws",
@@ -45,6 +57,8 @@ sdk-alloy = [
     "dep:alloy-primitives",
     "dep:alloy-rpc-types",
     "dep:alloy-mev",
+    "dep:alloy-rpc-types-eth",
+    "dep:alloy",
 ]
 
 # Optional Alloy deps for future migration. Not used unless `sdk-alloy` is enabled.

@@ -3,35 +3,86 @@ use std::{
     sync::Arc,
 };
 
-use crate::types::Executor;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use crate::eth::{Middleware, TxRequest, U256};
+use dashmap::DashMap;
+use ethers::utils::keccak256;
+
+use crate::eth::{Address as H160, Middleware, TxRequest, U256};
+use crate::executors::mempool_types::SubmitTxToMempool;
+use crate::types::Executor;
 
 /// An executor that sends transactions to the mempool.
 pub struct MempoolExecutor<M> {
     client: Arc<M>,
+    gas_cache: DashMap<GasCacheKey, U256>,
 }
 
-/// Information about the gas bid for a transaction.
-#[derive(Debug, Clone)]
-pub struct GasBidInfo {
-    /// Total profit expected from opportunity
-    pub total_profit: U256,
-
-    /// Percentage of bid profit to use for gas
-    pub bid_percentage: u64,
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct GasCacheKey {
+    to: Option<H160>,
+    data_hash: Option<[u8; 32]>,
+    value: Option<U256>,
+    chain_id: Option<u64>,
 }
 
-#[derive(Debug, Clone)]
-pub struct SubmitTxToMempool {
-    pub tx: TxRequest,
-    pub gas_bid_info: Option<GasBidInfo>,
+impl GasCacheKey {
+    fn new(tx: &TxRequest) -> Option<Self> {
+        let to = tx.to().and_then(|to| to.as_address()).copied();
+        let data_hash = tx.data().map(|bytes| keccak256(bytes.as_ref()));
+        let value = tx.value().cloned();
+        let chain_id = tx.chain_id().map(|id| id.as_u64());
+
+        Some(Self {
+            to,
+            data_hash,
+            value,
+            chain_id,
+        })
+    }
 }
 
 impl<M: Middleware> MempoolExecutor<M> {
     pub fn new(client: Arc<M>) -> Self {
-        Self { client }
+        Self {
+            client,
+            gas_cache: DashMap::new(),
+        }
+    }
+
+    async fn estimate_gas_cached(
+        &self,
+        tx: &TxRequest,
+        cache_key: Option<GasCacheKey>,
+    ) -> Result<U256>
+    where
+        M::Error: 'static,
+    {
+        if let Some(key) = cache_key {
+            if let Some(entry) = self.gas_cache.get(&key) {
+                let counter = metrics::counter!("artemis.executors.mempool.gas_cache_hits");
+                counter.increment(1);
+                return Ok(*entry.value());
+            }
+            let counter = metrics::counter!("artemis.executors.mempool.gas_cache_misses");
+            counter.increment(1);
+            let gas_usage = self
+                .client
+                .estimate_gas(tx, None)
+                .await
+                .context("Error estimating gas usage: {}")?;
+            self.gas_cache.insert(key, gas_usage);
+            let gauge = metrics::gauge!("artemis.executors.mempool.gas_cache_size");
+            gauge.set(self.gas_cache.len() as f64);
+            Ok(gas_usage)
+        } else {
+            let counter = metrics::counter!("artemis.executors.mempool.gas_cache_bypassed");
+            counter.increment(1);
+            self.client
+                .estimate_gas(tx, None)
+                .await
+                .context("Error estimating gas usage: {}")
+        }
     }
 }
 
@@ -43,11 +94,8 @@ where
 {
     /// Send a transaction to the mempool.
     async fn execute(&self, mut action: SubmitTxToMempool) -> Result<()> {
-        let gas_usage = self
-            .client
-            .estimate_gas(&action.tx, None)
-            .await
-            .context("Error estimating gas usage: {}")?;
+        let cache_key = GasCacheKey::new(&action.tx);
+        let gas_usage = self.estimate_gas_cached(&action.tx, cache_key).await?;
 
         let bid_gas_price;
         if let Some(gas_bid_info) = action.gas_bid_info {

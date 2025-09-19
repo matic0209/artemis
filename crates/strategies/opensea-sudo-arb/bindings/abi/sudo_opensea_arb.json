@@ -1,0 +1,231 @@
+[
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor",
+    "outputs": []
+  },
+  {
+    "inputs": [],
+    "type": "error",
+    "name": "NoProfit",
+    "outputs": []
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "user",
+        "type": "address",
+        "components": [],
+        "indexed": true
+      },
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address",
+        "components": [],
+        "indexed": true
+      }
+    ],
+    "type": "event",
+    "name": "OwnershipTransferred",
+    "outputs": [],
+    "anonymous": false
+  },
+  {
+    "inputs": [],
+    "stateMutability": "payable",
+    "type": "fallback",
+    "outputs": []
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "struct BasicOrderParameters",
+        "name": "basicOrder",
+        "type": "tuple",
+        "components": [
+          {
+            "internalType": "address",
+            "name": "considerationToken",
+            "type": "address",
+            "components": []
+          },
+          {
+            "internalType": "uint256",
+            "name": "considerationIdentifier",
+            "type": "uint256",
+            "components": []
+          },
+          {
+            "internalType": "uint256",
+            "name": "considerationAmount",
+            "type": "uint256",
+            "components": []
+          },
+          {
+            "internalType": "address payable",
+            "name": "offerer",
+            "type": "address",
+            "components": []
+          },
+          {
+            "internalType": "address",
+            "name": "zone",
+            "type": "address",
+            "components": []
+          },
+          {
+            "internalType": "address",
+            "name": "offerToken",
+            "type": "address",
+            "components": []
+          },
+          {
+            "internalType": "uint256",
+            "name": "offerIdentifier",
+            "type": "uint256",
+            "components": []
+          },
+          {
+            "internalType": "uint256",
+            "name": "offerAmount",
+            "type": "uint256",
+            "components": []
+          },
+          {
+            "internalType": "enum BasicOrderType",
+            "name": "basicOrderType",
+            "type": "uint8",
+            "components": []
+          },
+          {
+            "internalType": "uint256",
+            "name": "startTime",
+            "type": "uint256",
+            "components": []
+          },
+          {
+            "internalType": "uint256",
+            "name": "endTime",
+            "type": "uint256",
+            "components": []
+          },
+          {
+            "internalType": "bytes32",
+            "name": "zoneHash",
+            "type": "bytes32",
+            "components": []
+          },
+          {
+            "internalType": "uint256",
+            "name": "salt",
+            "type": "uint256",
+            "components": []
+          },
+          {
+            "internalType": "bytes32",
+            "name": "offererConduitKey",
+            "type": "bytes32",
+            "components": []
+          },
+          {
+            "internalType": "bytes32",
+            "name": "fulfillerConduitKey",
+            "type": "bytes32",
+            "components": []
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalOriginalAdditionalRecipients",
+            "type": "uint256",
+            "components": []
+          },
+          {
+            "internalType": "struct AdditionalRecipient[]",
+            "name": "additionalRecipients",
+            "type": "tuple[]",
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "amount",
+                "type": "uint256",
+                "components": []
+              },
+              {
+                "internalType": "address payable",
+                "name": "recipient",
+                "type": "address",
+                "components": []
+              }
+            ]
+          },
+          {
+            "internalType": "bytes",
+            "name": "signature",
+            "type": "bytes",
+            "components": []
+          }
+        ]
+      },
+      {
+        "internalType": "uint256",
+        "name": "paymentValue",
+        "type": "uint256",
+        "components": []
+      },
+      {
+        "internalType": "address payable",
+        "name": "sudo_pool",
+        "type": "address",
+        "components": []
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "executeArb",
+    "outputs": []
+  },
+  {
+    "inputs": [],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address",
+        "components": []
+      }
+    ]
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address",
+        "components": []
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "transferOwnership",
+    "outputs": []
+  },
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "withdraw",
+    "outputs": []
+  },
+  {
+    "inputs": [],
+    "stateMutability": "payable",
+    "type": "receive",
+    "outputs": []
+  }
+]

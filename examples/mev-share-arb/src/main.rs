@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use artemis_core::eth::{helpers, Address, LocalWallet, MiddlewareBuilder, Signer};
 use artemis_core::{
     collectors::mevshare_collector::MevShareCollector,
     engine::Engine,
@@ -8,7 +9,6 @@ use artemis_core::{
     types::{CollectorMap, ExecutorMap},
 };
 use clap::Parser;
-use artemis_core::eth::{helpers, MiddlewareBuilder, LocalWallet, Signer, Address};
 use mev_share_uni_arb::{
     strategy::MevShareUniArb,
     types::{Action, Event},

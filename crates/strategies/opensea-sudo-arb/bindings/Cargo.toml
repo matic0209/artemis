@@ -1,9 +1,14 @@
 [package]
 name = "bindings"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["sdk-ethers"]
+sdk-ethers = ["dep:ethers"]
+sdk-alloy = ["dep:alloy-contract", "dep:alloy-sol-types"]
 
 [dependencies]
-ethers = { version = "2", default-features = false, features = ["abigen"] }
+ethers = { version = "2", default-features = false, features = ["abigen"], optional = true }
+alloy-contract = { version = "1", optional = true }
+alloy-sol-types = { version = "1", optional = true }

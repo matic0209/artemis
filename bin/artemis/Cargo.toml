@@ -18,6 +18,8 @@ anyhow = "1.0.70"
 tracing = "0.1.37"
 tracing-subscriber = "0.3.16"
 clap = { version = "4.2.5", features = ["derive"] }
+metrics-exporter-prometheus = "0.14"
+hyper = { version = "0.14", features = ["full"] }
 
 [features]
 default = []

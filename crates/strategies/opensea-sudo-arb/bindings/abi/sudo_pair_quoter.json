@@ -1,0 +1,82 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "address payable[]",
+        "name": "pool_addresses",
+        "type": "address[]",
+        "components": []
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "getMultipleSellQuotes",
+    "outputs": [
+      {
+        "internalType": "struct SudoPairQuoter.SellQuote[]",
+        "name": "sell_quotes",
+        "type": "tuple[]",
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "quoteAvailable",
+            "type": "bool",
+            "components": []
+          },
+          {
+            "internalType": "address",
+            "name": "nftAddress",
+            "type": "address",
+            "components": []
+          },
+          {
+            "internalType": "uint256",
+            "name": "price",
+            "type": "uint256",
+            "components": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address payable",
+        "name": "pool_address",
+        "type": "address",
+        "components": []
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function",
+    "name": "getSellQuote",
+    "outputs": [
+      {
+        "internalType": "struct SudoPairQuoter.SellQuote",
+        "name": "sell_quote",
+        "type": "tuple",
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "quoteAvailable",
+            "type": "bool",
+            "components": []
+          },
+          {
+            "internalType": "address",
+            "name": "nftAddress",
+            "type": "address",
+            "components": []
+          },
+          {
+            "internalType": "uint256",
+            "name": "price",
+            "type": "uint256",
+            "components": []
+          }
+        ]
+      }
+    ]
+  }
+]

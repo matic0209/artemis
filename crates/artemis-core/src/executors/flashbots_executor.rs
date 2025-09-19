@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use crate::eth::{Middleware, Signer, TxRequest};
 use anyhow::Result;
 use async_trait::async_trait;
-use crate::eth::{Middleware, Signer, TxRequest};
 use ethers_flashbots::{BundleRequest, FlashbotsMiddleware};
 use reqwest::Url;
 use tracing::error;

@@ -6,20 +6,42 @@ edition = "2021"
 [dependencies]
 
 ## eth
-artemis-core = { path = "../../artemis-core" }
-ethers.workspace = true
-bindings = { path = "./bindings" }
+artemis-core = { path = "../../artemis-core", default-features = false }
+ethers = { workspace = true, optional = true }
+bindings = { path = "./bindings", default-features = false }
 opensea-stream = { git = "https://github.com/FrankieIsLost/opensea-stream-rs"}
-opensea-v2 = { path = "../../clients/opensea-v2" }
+opensea-v2 = { path = "../../clients/opensea-v2", default-features = false }
 
 ## async
 async-trait = "0.1.64"
+futures = "0.3"
 
 ## misc
 anyhow = "1.0.70"
 tracing = "0.1.37"
+metrics = "0.22"
+lru = "0.11"
+parking_lot = "0.12"
+once_cell = { version = "1.19", optional = true }
+alloy-primitives = { version = "1", optional = true }
+alloy-provider = { version = "1", optional = true }
+alloy-rpc-types-eth = { version = "1", optional = true }
 
 [features]
-default = []
-sdk-alloy = []
-
+default = ["sdk-ethers"]
+sdk-ethers = [
+    "artemis-core/sdk-ethers",
+    "bindings/sdk-ethers",
+    "dep:ethers",
+    "opensea-v2/sdk-ethers",
+]
+sdk-alloy = [
+    "artemis-core/sdk-alloy",
+    "bindings/sdk-alloy",
+    "dep:ethers",
+    "dep:once_cell",
+    "dep:alloy-primitives",
+    "dep:alloy-provider",
+    "dep:alloy-rpc-types-eth",
+    "opensea-v2/sdk-alloy",
+]

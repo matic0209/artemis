@@ -1,7 +1,5 @@
 use async_trait::async_trait;
-use ethers::{
-    providers::{spoof, CallBuilder, Middleware as EthersMiddleware, MiddlewareError, RawCall},
-};
+use ethers::providers::{spoof, CallBuilder, MiddlewareError, RawCall};
 use thiserror::Error;
 
 use crate::eth::{Address, BlockId, Bytes, Middleware, TxRequest};
@@ -43,11 +41,7 @@ where
     }
 
     /// Performs a call with the state override.
-    async fn call(
-        &self,
-        tx: &TxRequest,
-        block: Option<BlockId>,
-    ) -> Result<Bytes, Self::Error> {
+    async fn call(&self, tx: &TxRequest, block: Option<BlockId>) -> Result<Bytes, Self::Error> {
         let call_builder = CallBuilder::new(self.inner.provider(), tx);
         let call_builder = match block {
             Some(block) => call_builder.block(block),
