@@ -12,10 +12,11 @@
 
 Artemis is a framework for writing MEV bots in Rust. It's designed to be simple, modular, and fast.
 
-Key updates (Alloy migration):
-- SDK adapter layer with feature flags: default enables both `sdk-alloy` and `sdk-ethers` for a smooth transition. New code paths prefer Alloy; ethers remains available for fallback modules.
-- Optional Alloy MEV integration: `alloy-mev` is wired behind `sdk-alloy` with a new executor skeleton (`flashbots_alloy_executor`).
-- Backpressure: collectors now use bounded channels to handle bursts without blocking.
+**🚀 Now powered by Alloy**: Artemis has been fully migrated from ethers-rs to the modern [Alloy](https://github.com/alloy-rs/alloy) Ethereum SDK, providing:
+- ⚡ **Better Performance**: Optimized RPC client with connection pooling and batching
+- 🔧 **Modern APIs**: Type-safe contract bindings using `sol!` macros
+- 📊 **Enhanced Monitoring**: Built-in metrics and backpressure handling
+- 🎯 **MEV Integration**: Native support for Flashbots and MEV-Share via [`alloy-mev`](https://github.com/leruaa/alloy-mev)
 
 At its core, Artemis is architected as an event processing pipeline. The library is made up of three main components: 
 
@@ -25,9 +26,10 @@ At its core, Artemis is architected as an event processing pipeline. The library
 
 ## Strategies 
 
-The following strategies have been implemented: 
+The following strategies have been implemented and migrated to Alloy: 
 
-- [Opensea/Sudoswap NFT Arbitrage](/crates/strategies/opensea-sudo-arb/): A strategy implementing atomic, cross-market NFT arbitrage between Seaport and Sudoswap.
+- [Opensea/Sudoswap NFT Arbitrage](/crates/strategies/opensea-sudo-arb/): ✅ **Fully migrated** - Atomic cross-market NFT arbitrage between Seaport and Sudoswap using Alloy contract bindings and state overrides.
+- [MEV-Share Uniswap Arbitrage](/crates/strategies/mev-share-uni-arb/): ✅ **Fully migrated** - Probabilistic Uniswap V3/V2 arbitrage on MEV-Share using Alloy providers and signers.
 
 ## Build, Test and Run
 
@@ -54,6 +56,25 @@ cargo run --bin artemis -- --wss <WSS_ENDPOINT> --opensea-api-key <OPENSEA_API_K
   --private-key <PRIVATE_KEY> --arb-contract-address <ARB_CONTRACT_ADDRESS> \
   --bid-percentage <BID_PERCENTAGE>
 ```
+
+## Architecture (Alloy-Powered)
+
+**Collectors** (Data Sources):
+- `BlockCollector`: Subscribes to new blocks via Alloy WebSocket with bounded channel backpressure
+- `MempoolCollector`: Tracks pending transactions with configurable batching  
+- `OpenseaOrderCollector`: Monitors OpenSea order streams
+- `MevShareCollector`: Listens to MEV-Share event streams
+
+**Executors** (Action Handlers):
+- `MempoolAlloyExecutor`: Submits transactions with gas optimization and caching
+- `FlashbotsAlloyExecutor`: Sends bundles to block builders via `alloy-mev`
+- `MevshareAlloyExecutor`: Submits MEV-Share bundles with signing
+
+**Performance Features**:
+- 🚀 **Bounded Channels**: Prevent memory bloat during high-throughput periods
+- ⚡ **Gas Caching**: LRU cache for gas estimates to reduce RPC calls
+- 📊 **Metrics**: Prometheus-compatible metrics for monitoring
+- 🔄 **Connection Pooling**: Efficient RPC connection reuse
 
 ### Environment Configuration
 

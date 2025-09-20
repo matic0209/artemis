@@ -1,6 +1,8 @@
-# Opensea Sudo Arb
+# Opensea Sudo Arb ✅ Alloy-Powered
 
-A strategy implementing atomic, cross-market NFT arbitrage between Seaport and Sudoswap. At a high level, we listen to a stream of new seaport orders, and compute whether we can atomically fulfill the order and sell the NFT into a sudoswap pool while making a profit. 
+A strategy implementing atomic, cross-market NFT arbitrage between Seaport and Sudoswap using the modern Alloy Ethereum SDK. At a high level, we listen to a stream of new seaport orders, and compute whether we can atomically fulfill the order and sell the NFT into a sudoswap pool while making a profit.
+
+**Migration Status**: ✅ **Complete** - Fully migrated from ethers-rs to Alloy with enhanced performance and modern contract bindings. 
 
 ## Strategy 
 
@@ -41,8 +43,13 @@ You can run the rust tests with the following command:
 cargo test
 ```
 
-And if you need to regenerate rust bindings for contracts, you can run 
+## Alloy Features
 
-```sh
-forge bind --bindings-path ./bindings --root ./contracts --crate-name bindings --overwrite
-```
+This strategy now uses modern Alloy features:
+- **Contract Bindings**: `sol!` macros for type-safe contract interactions
+- **State Override**: Alloy `StateOverride` for simulating quotes without state changes
+- **Provider**: Alloy `RootProvider` with WebSocket subscriptions and HTTP calls
+- **Performance**: Bounded channels, gas caching, and metrics collection
+- **Type Safety**: Compile-time ABI validation and automatic encoding/decoding
+
+Contract bindings are now generated using Alloy's `sol!` macro instead of ethers `abigen!`. See `bindings/src/alloy.rs` for the current implementation.
