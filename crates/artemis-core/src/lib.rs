@@ -31,7 +31,7 @@ pub mod collectors;
 /// This module contains the [Engine](engine::Engine) struct, which is responsible
 /// for orchestrating data flows between components
 pub mod engine;
-/// This module provides an SDK adapter layer (ethers by default, alloy behind a feature).
+/// This module provides Alloy-based Ethereum SDK adapter layer.
 pub mod eth;
 /// This module contains [executor](types::Executor) implementations.
 pub mod executors;
@@ -40,13 +40,8 @@ pub mod types;
 /// This module contains utilities for working with Artemis.
 pub mod utilities;
 
-#[cfg(feature = "sdk-alloy")]
 use alloy as _;
-#[cfg(feature = "sdk-alloy")]
 use alloy_mev as _;
-#[cfg(feature = "sdk-alloy")]
 use alloy_rpc_types as _;
-#[cfg(feature = "sdk-alloy")]
 use alloy_transport_http as _;
-#[cfg(feature = "sdk-alloy")]
 use alloy_transport_ws as _;
