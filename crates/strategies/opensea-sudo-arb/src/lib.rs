@@ -8,8 +8,10 @@
 //! Seaport and Sudoswap. At a high level, we listen to a stream of new seaport orders,
 //! and compute whether we can atomically fulfill the order and sell the NFT into a
 //! sudoswap pool while making a profit.
-#[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
 use {futures as _, lru as _, metrics as _, opensea_stream as _, parking_lot as _, tracing as _};
+
+/// Alloy-based strategy implementation.
+pub mod alloy_impl;
 
 /// This module contains constants used by the strategy.
 pub mod constants;

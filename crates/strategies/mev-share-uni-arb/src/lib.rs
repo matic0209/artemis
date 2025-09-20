@@ -3,6 +3,9 @@
 //! that touch a v3 pool that we have a v2 pool for. We then submit a series of backruns
 //! of varying sizes, hoping that one of them will be profitable.
 
+/// Alloy-based strategy implementation.
+pub mod alloy_impl;
+
 /// This module contains the core strategy implementation.
 pub mod strategy;
 
