@@ -26,22 +26,47 @@ item should be completed and validated (compilation + relevant tests) before mov
 - [ ] Regenerate contract bindings with Alloy tooling; replace `ethers`-generated code under `bindings/`. *(Remaining: convert residual `ethers` `abigen!` modules to `sol!` variants or delete once the legacy feature flag is gone.)*
     - [x] `mev-share-uni-arb` bindings now use `sol!`/Alloy; legacy `ethers` code generated at build time.
     - [x] `opensea-sudo-arb` bindings now expose `sol!`-based definitions for the Sudo contracts and helpers (Alloy ABI parity pending widened coverage).
-- [ ] Update strategies (`opensea-sudo-arb`, `mev-share-uni-arb`, etc.) to use Alloy bindings and types. *(Outstanding: finish the Alloy implementation for `opensea-sudo-arb` and untangle shared utilities from `ethers`.)*
+- [x] Update strategies (`opensea-sudo-arb`, `mev-share-uni-arb`, etc.) to use Alloy bindings and types. *(Alloy implementations now cover quoting, event processing, and tx construction; default features favour Alloy while ethers stays opt-in for parity checks.)*
     - [x] `mev-share-uni-arb` compiles on both SDKs via split `cfg` modules.
-    - [x] `opensea-sudo-arb` strategy skeleton compiles under `sdk-alloy` (logic parity TBD). *(Alloy build now passes; next step is wiring signer/provider ownership and reconciling touched-pool refresh logic for runtime parity.)*
-- [ ] Rewrite transaction/bundle construction to Alloy encoding/signing APIs. *(Remaining focus area: finish `opensea-sudo-arb` signing path + wallet sourcing; `mev-share-uni-arb` already Alloy-native.)*
+    - [x] `opensea-sudo-arb` strategy skeleton compiles under `sdk-alloy` (logic parity TBD). *(Alloy path validated via state-sync/order-cache tests; provider/wallet wiring now matches runtime usage.)*
+- [ ] Rewrite transaction/bundle construction to Alloy encoding/signing APIs. *(Remaining focus area: finish `opensea-sudo-arb` signing path + wallet sourcing; Alloy path now injects the provider's default signer when building calls; `mev-share-uni-arb` already Alloy-native.)*
     - [x] `mev-share-uni-arb` Alloy path signs via `EthereumWallet` and encodes bundles with `TxEnvelope`.
-- [ ] Validate strategy state sync & event processing with Alloy paths (add tests/snapshots as needed). *(Need Alloy-driven integration/smoke coverage for strategies + collectors.)*
+- [ ] Validate strategy state sync & event processing with Alloy paths (add tests/snapshots as needed). *(Added unit tests plus mocked sync/new-block smoke tests for factory discovery, touched-pool refresh, and quote replay; broader end-to-end coverage still pending.)*
 
 ## Phase 4 – Applications & Examples
-- [ ] Migrate CLI binaries (`bin/artemis`, `examples/*`) to Alloy initialization flows. *(Replace `ethers` helpers with `alloy_support::helpers`, ensure strategies/executors load under Alloy feature only.)*
-- [ ] Update documentation/tutorials for new setup (`README`, docs/ guides). *(Document Alloy-first setup, env vars, and build flags.)*
+- [x] Migrate CLI binaries (`bin/artemis`, `examples/*`) to Alloy initialization flows. *(CLI + examples now default to Alloy; enable `sdk-ethers` explicitly when testing legacy paths.)*
+    - [x] `bin/artemis` boots with Alloy provider + wallet plumbing behind the `sdk-alloy` feature gate.
+    - [x] `examples/mev-share-arb` switches between ethers + Alloy providers/executors with feature flags (bundle conversion now mapped explicitly to Alloy RPC types).
+- [x] Update documentation/tutorials for new setup (`README`, docs/ guides). *(Document Alloy-first defaults, env vars, and feature-flag toggles.)*
+    - [x] Added Alloy setup guide (`docs/alloy_setup.md`) and refreshed README feature instructions.
 - [ ] Provide Alloy-based end-to-end demos (collector→strategy→executor). *(Publish runnable scripts or walkthroughs proving the Alloy stack end-to-end.)*
+    - [x] Added `examples/alloy-quickstart` smoke test and documented Anvil-based workflow in the Alloy setup guide.
 
 ## Phase 5 – Cleanup & Validation
 - [ ] Remove `ethers` dependencies, `sdk-ethers` feature flags, and legacy code paths. *(Requires successful Alloy regression + crate-by-crate dependency sweep.)*
 - [ ] Delete temporary conversion helpers once Alloy is the single backend. *(Can drop `to_alloy_*` / `from_alloy_*` shims and state-override bridges post cutover.)*
 - [ ] Ensure CI builds/tests run purely on Alloy. *(Update default feature set and CI matrix to Alloy-only.)*
 - [ ] Perform full regression (perf tests, soak, integration labs). *(Schedule perf + soak campaigns against Alloy-backed binaries.)*
+
+---
+
+## Immediate Action Items (tracked in feat/alloy-migration)
+
+- [ ] Step 1: Implement Alloy Flashbots executor simulate/send using `alloy-mev` (`EthMevProviderExt` / `MevShareProviderExt`) and feature-register in entrypoints; keep ethers executor in parallel.
+  - [ ] HTTP provider wiring + trait import scope
+  - [ ] RLP raw tx bundle construction (from Alloy signing)
+  - [ ] simulate → send happy-path + error logging
+
+- [ ] Step 2: Add high-level helpers in adapter (sign → RLP → send, chain id, estimate) and refactor callers to avoid SDK direct usage.
+  - [x] Ethers helpers (chain id / estimate / gas price / sign / send) added
+  - [ ] Alloy helpers (TxEnvelope signing, raw tx hex, send)
+
+- [x] Step 3: Introduce bounded buffers/backpressure to Collectors; begin enabling Provider fillers; reduce explicit `estimate_gas/get_gas_price` on hot path.
+
+- [ ] Step 4: After soak and perf validation, switch default features to Alloy-only and remove `sdk-ethers` from default.
+
+Notes:
+- Chainbound client remains excluded until upstream `fiber-rs` aligns Alloy/serde; re-include post-upgrade.
+- CI to add a matrix job for `--features sdk-alloy` build/tests prior to default cutover.
 
 Keep this checklist updated as tasks complete.

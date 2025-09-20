@@ -436,6 +436,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "alloy-quickstart"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "artemis-core",
+ "hex",
+ "rand 0.8.5",
+ "tokio",
+]
+
+[[package]]
 name = "alloy-rlp"
 version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -964,6 +975,8 @@ dependencies = [
 name = "artemis"
 version = "0.1.0"
 dependencies = [
+ "alloy-provider",
+ "alloy-transport-ws",
  "anyhow",
  "artemis-core",
  "async-trait",
@@ -986,10 +999,12 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "alloy-mev",
+ "alloy-network",
  "alloy-primitives",
  "alloy-provider",
  "alloy-rpc-types",
  "alloy-rpc-types-eth",
+ "alloy-signer",
  "alloy-signer-local",
  "alloy-transport-http",
  "alloy-transport-ws",
@@ -3948,12 +3963,17 @@ dependencies = [
 name = "mev-share-arb"
 version = "0.1.0"
 dependencies = [
+ "alloy-primitives",
+ "alloy-provider",
+ "alloy-rpc-types-mev",
+ "alloy-transport-ws",
  "anyhow",
  "artemis-core",
  "async-trait",
  "clap",
  "dotenv",
  "futures",
+ "mev-share",
  "mev-share-uni-arb",
  "tokio",
  "tracing",
@@ -4243,6 +4263,8 @@ dependencies = [
  "alloy-primitives",
  "alloy-provider",
  "alloy-rpc-types-eth",
+ "alloy-sol-types",
+ "alloy-transport",
  "anyhow",
  "artemis-core",
  "async-trait",
@@ -4255,6 +4277,7 @@ dependencies = [
  "opensea-stream",
  "opensea-v2",
  "parking_lot",
+ "serde_json",
  "tracing",
 ]
 
@@ -4263,7 +4286,6 @@ name = "opensea-v2"
 version = "0.1.0"
 dependencies = [
  "artemis-core",
- "ethers",
  "reqwest 0.11.27",
  "serde",
  "serde_json",

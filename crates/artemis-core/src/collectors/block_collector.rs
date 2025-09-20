@@ -1,6 +1,6 @@
 use crate::eth::Hash as H256;
 #[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
-use crate::eth::{helpers as alloy_helpers, BlockNumberOrTag, Provider as AlloyProvider, U64};
+use crate::eth::{BlockNumberOrTag, U64};
 #[cfg(feature = "sdk-ethers")]
 use crate::eth::{Middleware, PubsubClient, U64};
 use crate::types::{Collector, CollectorStream};
@@ -8,6 +8,8 @@ use crate::types::{Collector, CollectorStream};
 use alloy_provider::Provider as ProviderTrait;
 use anyhow::Result;
 use async_trait::async_trait;
+#[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
+use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 #[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
@@ -67,7 +69,10 @@ where
 
 #[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
 #[async_trait]
-impl Collector<NewBlock> for BlockCollector<AlloyProvider> {
+impl<P> Collector<NewBlock> for BlockCollector<P>
+where
+    P: ProviderTrait + Clone + Send + Sync + 'static,
+{
     async fn get_event_stream(&self) -> Result<CollectorStream<'_, NewBlock>> {
         let (tx, rx) = mpsc::channel::<NewBlock>(1024);
         let provider = self.provider.clone();
@@ -78,8 +83,8 @@ impl Collector<NewBlock> for BlockCollector<AlloyProvider> {
             loop {
                 interval.tick().await;
 
-                let current_number = match alloy_helpers::get_block_number(&provider).await {
-                    Ok(val) => val.to::<u64>(),
+                let current_number = match provider.get_block_number().await {
+                    Ok(val) => u64::try_from(val).unwrap_or_default(),
                     Err(err) => {
                         warn!("failed to poll block number via alloy provider: {err}");
                         continue;

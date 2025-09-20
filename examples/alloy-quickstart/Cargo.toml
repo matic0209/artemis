@@ -1,0 +1,17 @@
+[package]
+name = "alloy-quickstart"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+anyhow = "1.0"
+tokio = { version = "1.18", features = ["full"] }
+artemis-core = { path = "../../crates/artemis-core", default-features = false }
+hex = "0.4"
+rand = "0.8"
+
+[features]
+default = ["sdk-alloy"]
+sdk-alloy = ["artemis-core/sdk-alloy"]
+sdk-ethers = ["artemis-core/sdk-ethers"]

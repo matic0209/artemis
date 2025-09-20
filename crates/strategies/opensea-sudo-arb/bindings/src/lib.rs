@@ -1,97 +1,15 @@
 #![allow(clippy::all)]
 
 #[cfg(feature = "sdk-ethers")]
-macro_rules! ethers_modules {
-    ($($name:ident),+ $(,)?) => {
-        $(pub mod $name;)+
-    };
-}
-
+pub mod lssvm_pair;
 #[cfg(feature = "sdk-ethers")]
-ethers_modules!(
-    address,
-    amount_derivation_errors,
-    amount_deriver,
-    assertions,
-    basic_order_fulfiller,
-    conduit,
-    conduit_constants,
-    conduit_controller_interface,
-    conduit_enums,
-    conduit_interface,
-    conduit_structs,
-    consideration,
-    consideration_base,
-    consideration_constants,
-    consideration_enums,
-    consideration_events_and_errors,
-    consideration_interface,
-    consideration_structs,
-    context,
-    counter_manager,
-    criteria_resolution,
-    criteria_resolution_errors,
-    curve_error_codes,
-    eip1271_interface,
-    enumerable_set,
-    erc1155_holder,
-    erc1155_receiver,
-    erc165,
-    erc20,
-    executor,
-    fixed_point_math_lib,
-    fulfillment_application_errors,
-    fulfillment_applier,
-    getters_and_derivers,
-    i_curve,
-    ierc1155,
-    ierc1155_receiver,
-    ierc165,
-    ierc721,
-    ierc721_enumerable,
-    ilssvm_pair_factory_like,
-    i_ownership_transfer_callback,
-    low_level_helpers,
-    lssvm_pair,
-    lssvm_pair_cloner,
-    lssvm_pair_enumerable,
-    lssvm_pair_enumerable_erc20,
-    lssvm_pair_enumerable_eth,
-    lssvm_pair_erc20,
-    lssvm_pair_eth,
-    lssvm_pair_factory,
-    lssvm_pair_missing_enumerable,
-    lssvm_pair_missing_enumerable_erc20,
-    lssvm_pair_missing_enumerable_eth,
-    lssvm_router,
-    order_combiner,
-    order_fulfiller,
-    order_validator,
-    ownable,
-    ownable_with_transfer_callback,
-    owned,
-    reentrancy_errors,
-    reentrancy_guard,
-    safe_transfer_lib,
-    seaport,
-    seaport_interface,
-    shared_types,
-    signature_verification,
-    signature_verification_errors,
-    std_invariant,
-    sudo_opensea_arb,
-    sudo_pair_quoter,
-    token_transferrer,
-    token_transferrer_constants,
-    token_transferrer_errors,
-    transfer_helper,
-    transfer_helper_interface,
-    transfer_helper_structs,
-    verifiers,
-    zone_interaction,
-    zone_interaction_errors,
-    zone_interface,
-);
+pub mod lssvm_pair_factory;
+#[cfg(feature = "sdk-ethers")]
+pub mod shared_types;
+#[cfg(feature = "sdk-ethers")]
+pub mod sudo_opensea_arb;
+#[cfg(feature = "sdk-ethers")]
+pub mod sudo_pair_quoter;
 
 #[cfg(feature = "sdk-alloy")]
 pub mod alloy;

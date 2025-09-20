@@ -37,9 +37,11 @@ alloy-primitives = { version = "1", optional = true }
 alloy-rpc-types = { version = "1", optional = true }
 alloy-mev = { version = "1.0.0", optional = true }
 alloy = { version = "1", optional = true }
+alloy-signer = { version = "1", optional = true }
+alloy-network = { version = "1", optional = true }
 
 [features]
-default = ["sdk-ethers", "sdk-alloy"]
+default = ["sdk-alloy"]
 sdk-ethers = [
     "dep:ethers",
     "dep:ethers-flashbots",
@@ -59,6 +61,8 @@ sdk-alloy = [
     "dep:alloy-mev",
     "dep:alloy-rpc-types-eth",
     "dep:alloy",
+    "dep:alloy-signer",
+    "dep:alloy-network",
 ]
 
 # Optional Alloy deps for future migration. Not used unless `sdk-alloy` is enabled.

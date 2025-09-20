@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["sdk-ethers"]
+default = ["sdk-alloy"]
 sdk-ethers = ["dep:ethers"]
 sdk-alloy = ["dep:alloy-contract", "dep:alloy-sol-types"]
 

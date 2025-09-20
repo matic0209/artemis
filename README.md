@@ -50,22 +50,78 @@ cargo test --workspace --all-features
 In order to run the opensea sudoswap arbitrage strategy, you can run the following command:
 
 ```sh
-cargo run -- --wss <WSS_ENDPOINT> --opensea-api-key <OPENSEA_API_KEY> --private-key <PRIVATE_KEY> --arb-contract-address <ARB_CONTRACT_ADDRESS> --bid-percentage <BID_PERCENTAGE>
+cargo run --bin artemis -- --wss <WSS_ENDPOINT> --opensea-api-key <OPENSEA_API_KEY> \
+  --private-key <PRIVATE_KEY> --arb-contract-address <ARB_CONTRACT_ADDRESS> \
+  --bid-percentage <BID_PERCENTAGE>
+```
+
+### Environment Configuration
+
+Environment variables are loaded automatically via `just` (see `set dotenv-load := true` in the
+`justfile`). Populate the root `.env` file with:
+
+- `ARTEMIS_METRICS_ADDR`: where the Prometheus exporter should bind when the CLI runs.
+- `ALLOY_WS_ENDPOINT`: default WebSocket RPC used by Alloy-based examples such as
+  `examples/alloy-quickstart`.
+- `ETH_MAINNET_HTTP`: HTTPS mainnet RPC endpoint required by Foundry fork tests.
+- `ARTEMIS_*` and `MEV_SHARE_*`: optional helpers to store the arguments you pass to the
+  `artemis` binary and the MEV-Share example, keeping sensitive keys outside of your shell
+  history.
+- `ETHERSCAN_API_KEY`, `CHAINBOUND_API_KEY`, `FIBER_TEST_KEY`: API tokens for downloading
+  protocol artifacts or enabling the optional Chainbound integrations/tests.
 
 Feature flags:
-- Enable Alloy only:
-```
-cargo run --features sdk-alloy
-```
-- Enable ethers fallback only:
-```
-cargo run --no-default-features --features sdk-ethers
-```
 
-Alloy MEV (Flashbots/MEV-Share):
-- We include `alloy-mev` as an optional dependency. An Alloy-based Flashbots executor is available under `sdk-alloy` (module: `flashbots_alloy_executor`). It will submit bundles via HTTP provider extensions. See `alloy-mev` for API details:
-  - https://github.com/leruaa/alloy-mev
-```
+- Alloy is now the default, so `cargo run --bin artemis -- <ARGS>` spins up the
+  Alloy stack out of the box.
+- Opt into the legacy ethers backend with:
+
+  ```sh
+  cargo run --bin artemis --no-default-features --features sdk-ethers -- <ARGS>
+  ```
+
+- If you want to skip compiling any ethers code during workspace builds, add
+
+  ```sh
+  cargo run --bin artemis --no-default-features --features sdk-alloy -- <ARGS>
+  ```
+
+Alloy MEV (Flashbots / MEV-Share):
+
+- We include `alloy-mev` as an optional dependency. An Alloy-based Flashbots executor is available under `sdk-alloy` (module: `flashbots_alloy_executor`). It will submit bundles via HTTP provider extensions. See `alloy-mev` for API details: https://github.com/leruaa/alloy-mev
+
+  To run the MEV-Share example:
+
+  ```sh
+  cargo run --bin mev-share-arb -- \
+    --wss <WSS_ENDPOINT> --private-key <BOT_KEY> --flashbots-signer <SIGNER_KEY> \
+    --arb-contract-address <ARB_CONTRACT_ADDRESS>
+  ```
+
+  Legacy backend:
+
+  ```sh
+  cargo run --bin mev-share-arb --no-default-features --features sdk-ethers -- \
+    --wss <WSS_ENDPOINT> --private-key <BOT_KEY> --flashbots-signer <SIGNER_KEY> \
+    --arb-contract-address <ARB_CONTRACT_ADDRESS>
+  ```
+
+Alloy quickstart example:
+
+- A lightweight smoke test lives at `examples/alloy_quickstart.rs`. It connects
+  to a WebSocket endpoint (defaults to `ws://localhost:8545`) and fetches the
+  latest block via Alloy:
+
+  ```sh
+  ALLOY_WS_ENDPOINT=ws://localhost:8545 \
+    cargo run -p alloy-quickstart
+  ```
+
+  Add `--no-default-features --features sdk-ethers` if you need to compare with
+  the legacy stack.
+
+For a consolidated checklist covering prerequisites, build commands, and
+runtime instructions, see [docs/alloy_setup.md](docs/alloy_setup.md).
 
 where `ARB_CONTRACT_ADDRESS` is the address to which you deploy the [arb contract](/crates/strategies/opensea-sudo-arb/contracts/src/SudoOpenseaArb.sol).
 

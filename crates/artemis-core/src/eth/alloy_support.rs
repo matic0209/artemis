@@ -60,6 +60,26 @@ pub mod helpers {
     pub fn keccak256_hash(data: impl AsRef<[u8]>) -> Hash {
         keccak256(data.as_ref())
     }
+
+    pub async fn get_chain_id(provider: &Provider) -> Result<u64> {
+        Ok(ProviderTrait::get_chain_id(provider).await?)
+    }
+
+    pub async fn sign_transaction_alloy(_signer: &LocalWallet, _tx: &TxRequest) -> Result<String> {
+        // TODO: Implement proper Alloy transaction signing
+        // The signing API in Alloy is different from ethers
+        Err(anyhow!("Alloy transaction signing not yet implemented"))
+    }
+
+    pub async fn send_transaction_alloy(provider: &Provider, tx: TxRequest) -> Result<()> {
+        let _pending = ProviderTrait::send_transaction(provider, tx).await?;
+        Ok(())
+    }
+
+    pub async fn estimate_gas_alloy(provider: &Provider, tx: &TxRequest) -> Result<U256> {
+        let gas = ProviderTrait::estimate_gas(provider, tx.clone()).await?;
+        Ok(U256::from(gas))
+    }
 }
 
 // TODO: once collectors/executors are migrated, provide subscription helpers

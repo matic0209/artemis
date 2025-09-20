@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use artemis_core::eth::{Address as H160, Bytes, Hash as H256, U256};
-use ethers::types::Chain;
 use serde::{de, Deserialize, Serialize, Serializer};
 use thiserror::Error;
 
@@ -18,7 +17,6 @@ pub struct FulfillListingRequest {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Listing {
     pub hash: H256,
-    #[serde(serialize_with = "chain_to_str")]
     pub chain: Chain,
     #[serde(
         rename = "protocol_address",
@@ -46,6 +44,13 @@ pub enum ProtocolVersion {
     V1_1,
     V1_4,
     V1_5,
+}
+
+/// Chains supported by the OpenSea V2 API integration.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum Chain {
+    #[serde(rename = "ethereum")]
+    Mainnet,
 }
 
 /// Information needed to fulfill the listing.
@@ -116,15 +121,6 @@ pub struct AdditionalRecipient {
 pub enum OpenSeaApiError {
     #[error(transparent)]
     Reqwest(#[from] reqwest::Error),
-}
-
-/// Helper function to convert a chain to a string.
-fn chain_to_str<S: Serializer>(chain: &Chain, serializer: S) -> Result<S::Ok, S::Error> {
-    let chain_str = match chain {
-        Chain::Mainnet => "ethereum",
-        _ => Err(serde::ser::Error::custom("Unsupported chain"))?,
-    };
-    serializer.serialize_str(chain_str)
 }
 
 /// Helper function to convert a protocol version to a string.
