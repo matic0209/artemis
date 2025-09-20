@@ -25,3 +25,4 @@ alloy-transport-ws = { version = "1" }
 
 [features]
 default = []
+rbuilder-integration = ["artemis-core/rbuilder-integration"]

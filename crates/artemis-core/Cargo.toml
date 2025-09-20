@@ -14,7 +14,7 @@ mev-share = "0.1.4"
 ## async
 async-trait = "0.1.64"
 futures = { version = "0.3" }
-reqwest = { version = "0.11.14", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.11.14", default-features = false, features = ["rustls-tls", "json"] }
 tokio = { version = "1.18", features = ["full"] }
 tokio-stream = { version = "0.1", features = ['sync'] }
 jsonrpsee = { version = "0.18", features = ["client", "async-client"] }
@@ -26,6 +26,7 @@ tracing = "0.1.37"
 tower = { version = "0.4.13" }
 metrics = "0.22"
 dashmap = "5"
+serde_json = "1.0"
 alloy-provider = { version = "1", features = ["ws", "reqwest"] }
 alloy-transport-ws = { version = "1" }
 alloy-transport-http = { version = "1" }
@@ -37,8 +38,12 @@ alloy-mev = { version = "1.0.0" }
 alloy = { version = "1" }
 alloy-signer = { version = "1" }
 alloy-network = { version = "1" }
+# rbuilder integration (optional)
+rbuilder = { git = "https://github.com/flashbots/rbuilder.git", optional = true }
+uuid = { version = "1.6", optional = true }
 
 [features]
 default = []
+rbuilder-integration = ["dep:rbuilder", "dep:uuid"]
 
 # Optional Alloy deps for future migration. Not used unless `sdk-alloy` is enabled.

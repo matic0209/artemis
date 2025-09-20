@@ -60,6 +60,18 @@ pub struct Args {
     /// Minimum transaction value to process in wei (default: 0)
     #[arg(long, default_value = "0")]
     pub min_tx_value: u128,
+
+    /// Enable rbuilder integration for advanced block building
+    #[arg(long)]
+    pub enable_rbuilder: bool,
+
+    /// rbuilder JSON-RPC endpoint (default: http://localhost:8645)
+    #[arg(long, default_value = "http://localhost:8645")]
+    pub rbuilder_url: String,
+
+    /// Block building algorithm (max-profit, mev-gas-price, type-max-profit)
+    #[arg(long, default_value = "max-profit")]
+    pub rbuilder_algorithm: String,
 }
 
 #[tokio::main]
@@ -123,7 +135,35 @@ async fn run_cli(args: Args) -> Result<()> {
     });
     engine.add_executor(Box::new(executor));
 
-    // TODO: Add Alloy Flashbots executor when Action::SubmitBundle is available
+    // Add rbuilder executor if enabled
+    #[cfg(feature = "rbuilder-integration")]
+    if args.enable_rbuilder {
+        use artemis_core::executors::rbuilder_executor::{RbuilderExecutor, RbuilderConfig, RbuilderBundle};
+        
+        let rbuilder_config = RbuilderConfig {
+            rpc_url: args.rbuilder_url,
+            sorting_algorithm: args.rbuilder_algorithm,
+            relay_urls: vec!["https://boost-relay.flashbots.net".to_string()],
+            enable_optimization: true,
+        };
+        
+        let rbuilder_executor = Box::new(RbuilderExecutor::new(rbuilder_config));
+        let rbuilder_executor = ExecutorMap::new(rbuilder_executor, |action| match action {
+            Action::SubmitTx(tx) => {
+                // Convert single tx to rbuilder bundle format
+                Some(RbuilderBundle {
+                    txs: vec!["0x".to_string()], // TODO: Convert tx to hex
+                    target_block: None,
+                    min_timestamp: None,
+                    max_timestamp: None,
+                    reverting_tx_hashes: vec![],
+                    replacement_uuid: None,
+                })
+            }
+        });
+        engine.add_executor(Box::new(rbuilder_executor));
+        info!("rbuilder executor enabled with algorithm: {}", args.rbuilder_algorithm);
+    }
 
     if let Ok(mut set) = engine.run().await {
         while let Some(res) = set.join_next().await {

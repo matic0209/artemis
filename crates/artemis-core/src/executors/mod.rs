@@ -13,3 +13,6 @@ pub mod flashbots_alloy_executor;
 
 /// Alloy-based MEV-share executor (using alloy-mev).
 pub mod mev_share_alloy_executor;
+
+/// Advanced executor using rbuilder for local block building optimization.
+pub mod rbuilder_executor;
