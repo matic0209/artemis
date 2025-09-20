@@ -1,4 +1,3 @@
-#![cfg(feature = "sdk-alloy")]
 
 use artemis_core::eth::LocalWallet;
 

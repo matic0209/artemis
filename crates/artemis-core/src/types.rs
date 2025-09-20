@@ -7,10 +7,7 @@ use tokio_stream::StreamExt;
 
 use crate::collectors::block_collector::NewBlock;
 use crate::collectors::opensea_order_collector::OpenseaOrder;
-#[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
 use crate::executors::flashbots_alloy_executor::FlashbotsAlloyBundle;
-#[cfg(feature = "sdk-ethers")]
-use crate::executors::flashbots_executor::FlashbotsBundle;
 use crate::executors::mempool_types::SubmitTxToMempool;
 
 /// A stream of events emitted by a [Collector](Collector).
@@ -105,14 +102,6 @@ pub enum Events {
 }
 
 /// Convenience enum containing all the actions that can be executed by executors.
-#[cfg(feature = "sdk-ethers")]
-pub enum Actions {
-    FlashbotsBundle(FlashbotsBundle),
-    SubmitTxToMempool(SubmitTxToMempool),
-}
-
-/// Convenience enum containing all the actions that can be executed by executors when using Alloy.
-#[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
 pub enum Actions {
     FlashbotsBundle(FlashbotsAlloyBundle),
     SubmitTxToMempool(SubmitTxToMempool),

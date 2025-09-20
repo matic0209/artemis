@@ -1,16 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
-#[cfg(all(feature = "sdk-ethers", feature = "sdk-alloy"))]
-compile_error!("Enable only one of `sdk-ethers` or `sdk-alloy` for `mev-share-uni-arb`.");
-
-#[cfg(feature = "sdk-ethers")]
-pub use ethers_impl::{MevShareUniArb, V2PoolInfo};
-
-#[cfg(feature = "sdk-alloy")]
+mod alloy_impl;
 pub use alloy_impl::{MevShareUniArb, V2PoolInfo};
-
-#[cfg(feature = "sdk-ethers")]
-mod ethers_impl {
     use std::collections::HashMap;
     use std::ops::Add;
     use std::path::PathBuf;

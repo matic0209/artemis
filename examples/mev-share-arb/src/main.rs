@@ -13,11 +13,7 @@ use mev_share_uni_arb::{
 use tracing::{info, Level};
 use tracing_subscriber::{filter, prelude::*};
 
-#[cfg(all(feature = "sdk-ethers", feature = "sdk-alloy"))]
-compile_error!("Enable only one of `sdk-ethers` or `sdk-alloy` for the MEV share example.");
-
-#[cfg(not(any(feature = "sdk-ethers", feature = "sdk-alloy")))]
-compile_error!("Enable either `sdk-ethers` or `sdk-alloy` feature for the MEV share example.");
+// MEV share example using Alloy
 
 #[cfg(feature = "sdk-ethers")]
 use artemis_core::eth::{

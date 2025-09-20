@@ -1,14 +1,8 @@
 //! Utilities for working with Artemis.
 
-/// This module implements state overriding middleware.
-#[cfg(feature = "sdk-ethers")]
-pub mod state_override_middleware;
-
-#[cfg(not(feature = "sdk-ethers"))]
+/// Alloy-based state override helper. Provides state override functionality
+/// for strategies to perform `eth_call` operations with temporary bytecode overrides.
 pub mod state_override_middleware {
-    //! Alloy-based state override helper. Provides a subset of the ethers middleware API used by
-    //! strategies so we can perform `eth_call` operations with temporary bytecode overrides.
-
     use alloy_provider::Provider as ProviderTrait;
     use alloy_rpc_types_eth::state::StateOverride;
     use anyhow::{anyhow, Result};

@@ -1,37 +1,28 @@
 #![allow(clippy::too_many_arguments)]
 
-#[cfg(all(feature = "sdk-ethers", feature = "sdk-alloy"))]
-compile_error!("Enable only one of `sdk-ethers` or `sdk-alloy` for `opensea-sudo-arb`.");
-
-#[cfg(feature = "sdk-ethers")]
-pub use ethers_impl::OpenseaSudoArb;
-
-#[cfg(feature = "sdk-alloy")]
+mod alloy_impl;
 pub use alloy_impl::OpenseaSudoArb;
-
-#[cfg(feature = "sdk-ethers")]
-mod ethers_impl {
     use std::cmp::Ordering;
     use std::collections::{BinaryHeap, HashMap};
     use std::num::NonZeroUsize;
-    use std::sync::Arc;
+use std::sync::Arc;
     use std::time::Instant;
 
-    use anyhow::Result;
-    use artemis_core::collectors::block_collector::NewBlock;
-    use artemis_core::collectors::opensea_order_collector::OpenseaOrder;
+use anyhow::Result;
+use artemis_core::collectors::block_collector::NewBlock;
+use artemis_core::collectors::opensea_order_collector::OpenseaOrder;
     use artemis_core::eth::{Address as H160, Filter, Hash as H256, Middleware, U256};
     use artemis_core::executors::mempool_types::{GasBidInfo, SubmitTxToMempool};
-    use artemis_core::types::Strategy;
-    use artemis_core::utilities::state_override_middleware::StateOverrideMiddleware;
+use artemis_core::types::Strategy;
+use artemis_core::utilities::state_override_middleware::StateOverrideMiddleware;
     use async_trait::async_trait;
     use bindings::lssvm_pair_factory::{LSSVMPairFactory, NewPairFilter};
     use bindings::sudo_opensea_arb::SudoOpenseaArb;
     use bindings::sudo_pair_quoter::{SellQuote, SudoPairQuoter, SUDOPAIRQUOTER_DEPLOYED_BYTECODE};
     use futures::stream::{self, StreamExt};
     use lru::LruCache;
-    use opensea_stream::schema::Chain;
-    use opensea_v2::client::OpenSeaV2Client;
+use opensea_stream::schema::Chain;
+use opensea_v2::client::OpenSeaV2Client;
     use opensea_v2::types::FulfillListingResponse;
     use parking_lot::Mutex;
     use tracing::info;
@@ -47,24 +38,24 @@ mod ethers_impl {
     const QUOTE_BATCH_SIZE: usize = 128;
     const RANGE_CHUNK_SIZE: u64 = 1_500;
 
-    #[derive(Debug, Clone)]
-    pub struct OpenseaSudoArb<M> {
-        /// Ethers client.
-        client: Arc<M>,
-        /// Opensea V2 client
-        opensea_client: OpenSeaV2Client,
-        /// LSSVM pair factory contract for getting pair history.
-        lssvm_pair_factory: Arc<LSSVMPairFactory<M>>,
-        /// Quoter for batch reading pair state.
-        quoter: SudoPairQuoter<StateOverrideMiddleware<Arc<M>>>,
-        /// Arb contract.
-        arb_contract: SudoOpenseaArb<M>,
+#[derive(Debug, Clone)]
+pub struct OpenseaSudoArb<M> {
+    /// Ethers client.
+    client: Arc<M>,
+    /// Opensea V2 client
+    opensea_client: OpenSeaV2Client,
+    /// LSSVM pair factory contract for getting pair history.
+    lssvm_pair_factory: Arc<LSSVMPairFactory<M>>,
+    /// Quoter for batch reading pair state.
+    quoter: SudoPairQuoter<StateOverrideMiddleware<Arc<M>>>,
+    /// Arb contract.
+    arb_contract: SudoOpenseaArb<M>,
         /// Map NFT addresses to a max-heap of Sudo pool bids.
         sudo_pools: HashMap<H160, BinaryHeap<PoolBidEntry>>,
-        /// Map Sudo pool addresses to the current bid for that pool (in ETH).
-        pool_bids: HashMap<H160, U256>,
-        /// Amount of profits to bid in gas
-        bid_percentage: u64,
+    /// Map Sudo pool addresses to the current bid for that pool (in ETH).
+    pool_bids: HashMap<H160, U256>,
+    /// Amount of profits to bid in gas
+    bid_percentage: u64,
         /// In-memory cache for fulfill listing responses to avoid spamming OpenSea API.
         order_cache: Arc<Mutex<LruCache<H256, Arc<FulfillListingResponse>>>>,
     }
@@ -85,81 +76,81 @@ mod ethers_impl {
         fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
             Some(self.cmp(other))
         }
-    }
+}
 
-    impl<M: Middleware + 'static> OpenseaSudoArb<M> {
-        pub fn new(client: Arc<M>, opensea_client: OpenSeaV2Client, config: Config) -> Self {
-            // Set up LSSVM pair factory contract.
-            let lssvm_pair_factory = Arc::new(LSSVMPairFactory::new(
-                *LSSVM_PAIR_FACTORY_ADDRESS,
-                client.clone(),
-            ));
-            // Set up Sudo pair quoter contract.
-            let mut state_override = StateOverrideMiddleware::new(client.clone());
-            let addr = state_override.add_code(SUDOPAIRQUOTER_DEPLOYED_BYTECODE.clone());
-            let quoter = SudoPairQuoter::new(addr, Arc::new(state_override));
-            // Set up arb contract.
-            let arb_contract = SudoOpenseaArb::new(config.arb_contract_address, client.clone());
+impl<M: Middleware + 'static> OpenseaSudoArb<M> {
+    pub fn new(client: Arc<M>, opensea_client: OpenSeaV2Client, config: Config) -> Self {
+        // Set up LSSVM pair factory contract.
+        let lssvm_pair_factory = Arc::new(LSSVMPairFactory::new(
+            *LSSVM_PAIR_FACTORY_ADDRESS,
+            client.clone(),
+        ));
+        // Set up Sudo pair quoter contract.
+        let mut state_override = StateOverrideMiddleware::new(client.clone());
+        let addr = state_override.add_code(SUDOPAIRQUOTER_DEPLOYED_BYTECODE.clone());
+        let quoter = SudoPairQuoter::new(addr, Arc::new(state_override));
+        // Set up arb contract.
+        let arb_contract = SudoOpenseaArb::new(config.arb_contract_address, client.clone());
             let order_cache = Arc::new(Mutex::new(LruCache::new(
                 NonZeroUsize::new(ORDER_CACHE_CAPACITY).unwrap(),
             )));
 
-            Self {
-                client,
-                opensea_client,
-                lssvm_pair_factory,
-                quoter,
-                arb_contract,
-                sudo_pools: HashMap::new(),
-                pool_bids: HashMap::new(),
-                bid_percentage: config.bid_percentage,
+        Self {
+            client,
+            opensea_client,
+            lssvm_pair_factory,
+            quoter,
+            arb_contract,
+            sudo_pools: HashMap::new(),
+            pool_bids: HashMap::new(),
+            bid_percentage: config.bid_percentage,
                 order_cache,
             }
-        }
     }
+}
 
-    #[async_trait]
-    impl<M: Middleware + 'static> Strategy<Event, Action> for OpenseaSudoArb<M> {
-        async fn sync_state(&mut self) -> Result<()> {
+#[async_trait]
+impl<M: Middleware + 'static> Strategy<Event, Action> for OpenseaSudoArb<M> {
+    async fn sync_state(&mut self) -> Result<()> {
             let start_block = super::super::constants::FACTORY_DEPLOYMENT_BLOCK;
 
-            let current_block = self.client.get_block_number().await?.as_u64();
+        let current_block = self.client.get_block_number().await?.as_u64();
 
-            let pool_addresses = self.get_new_pools(start_block, current_block).await?;
-            info!("found {} deployed sudo pools", pool_addresses.len());
+        let pool_addresses = self.get_new_pools(start_block, current_block).await?;
+        info!("found {} deployed sudo pools", pool_addresses.len());
 
             if !pool_addresses.is_empty() {
                 let timer = Instant::now();
                 let quotes = self.get_quotes_for_pools(pool_addresses).await?;
                 let histogram = metrics::histogram!("artemis.strategy.opensea_sudo.sync_quote_ms");
                 histogram.record(timer.elapsed().as_secs_f64() * 1_000.0);
-                self.update_internal_pool_state(quotes);
-            }
-            info!(
-                "done syncing state, found available pools for {} collections",
-                self.sudo_pools.len()
-            );
-
-            Ok(())
+            self.update_internal_pool_state(quotes);
         }
+        info!(
+            "done syncing state, found available pools for {} collections",
+            self.sudo_pools.len()
+        );
 
-        async fn process_event(&mut self, event: Event) -> Vec<Action> {
-            match event {
-                Event::OpenseaOrder(order) => self
-                    .process_order_event(*order)
-                    .await
-                    .map_or(vec![], |a| vec![a]),
-                Event::NewBlock(block) => match self.process_new_block_event(block).await {
-                    Ok(_) => vec![],
-                    Err(e) => {
-                        panic!("Strategy is out of sync {}", e);
-                    }
-                },
-            }
-        }
+        Ok(())
     }
 
-    impl<M: Middleware + 'static> OpenseaSudoArb<M> {
+    async fn process_event(&mut self, event: Event) -> Vec<Action> {
+        match event {
+            Event::OpenseaOrder(order) => self
+                .process_order_event(*order)
+                .await
+                .map_or(vec![], |a| vec![a]),
+            Event::NewBlock(block) => match self.process_new_block_event(block).await {
+                Ok(_) => vec![],
+                Err(e) => {
+                    panic!("Strategy is out of sync {}", e);
+                }
+            },
+        }
+    }
+}
+
+impl<M: Middleware + 'static> OpenseaSudoArb<M> {
         fn best_bid_for(&mut self, nft_address: &H160) -> Option<(H160, U256)> {
             let heap = self.sudo_pools.get_mut(nft_address)?;
             while let Some(entry) = heap.peek() {
@@ -175,23 +166,23 @@ mod ethers_impl {
             None
         }
 
-        async fn process_order_event(&mut self, event: OpenseaOrder) -> Option<Action> {
-            let nft_address = event.listing.context.item.nft_id.address;
-            info!("processing order event for address {}", nft_address);
+    async fn process_order_event(&mut self, event: OpenseaOrder) -> Option<Action> {
+        let nft_address = event.listing.context.item.nft_id.address;
+        info!("processing order event for address {}", nft_address);
 
-            match event.listing.context.item.nft_id.network {
-                Chain::Ethereum => {}
-                _ => return None,
-            }
-            if event.listing.payment_token.address != H160::zero() {
-                return None;
-            }
+        match event.listing.context.item.nft_id.network {
+            Chain::Ethereum => {}
+            _ => return None,
+        }
+        if event.listing.payment_token.address != H160::zero() {
+            return None;
+        }
 
             let (max_pool, max_bid) = self.best_bid_for(&nft_address)?;
 
             if max_bid <= event.listing.base_price {
-                return None;
-            }
+            return None;
+        }
 
             let timer = Instant::now();
             let order = match self.get_opensea_order(event.listing.order_hash).await {
@@ -204,20 +195,20 @@ mod ethers_impl {
             self.build_arb_tx(&order, max_pool, max_bid)
         }
 
-        async fn process_new_block_event(&mut self, event: NewBlock) -> Result<()> {
-            info!("processing new block {}", event.number);
-            let new_pools = self
-                .get_new_pools(event.number.as_u64(), event.number.as_u64())
-                .await?;
-            let touched_pools = self
-                .get_touched_pools(event.number.as_u64(), event.number.as_u64())
-                .await?;
-            let quotes = self
-                .get_quotes_for_pools([new_pools, touched_pools].concat())
-                .await?;
-            self.update_internal_pool_state(quotes);
-            Ok(())
-        }
+    async fn process_new_block_event(&mut self, event: NewBlock) -> Result<()> {
+        info!("processing new block {}", event.number);
+        let new_pools = self
+            .get_new_pools(event.number.as_u64(), event.number.as_u64())
+            .await?;
+        let touched_pools = self
+            .get_touched_pools(event.number.as_u64(), event.number.as_u64())
+            .await?;
+        let quotes = self
+            .get_quotes_for_pools([new_pools, touched_pools].concat())
+            .await?;
+        self.update_internal_pool_state(quotes);
+        Ok(())
+    }
 
         async fn get_opensea_order(
             &mut self,
@@ -249,11 +240,11 @@ mod ethers_impl {
         }
 
         fn build_arb_tx(
-            &self,
+        &self,
             order: &FulfillListingResponse,
-            sudo_pool: H160,
-            sudo_bid: U256,
-        ) -> Option<Action> {
+        sudo_pool: H160,
+        sudo_bid: U256,
+    ) -> Option<Action> {
             let payment_value: U256 = order.fulfillment_data.transaction.value.into();
             let total_profit = sudo_bid.checked_sub(payment_value)?;
 
@@ -267,16 +258,16 @@ mod ethers_impl {
                     .set_chain_id(order.fulfillment_data.transaction.chain);
             }
 
-            Some(Action::SubmitTx(SubmitTxToMempool {
+        Some(Action::SubmitTx(SubmitTxToMempool {
                 tx: call.tx,
-                gas_bid_info: Some(GasBidInfo {
-                    total_profit,
-                    bid_percentage: self.bid_percentage,
-                }),
-            }))
-        }
+            gas_bid_info: Some(GasBidInfo {
+                total_profit,
+                bid_percentage: self.bid_percentage,
+            }),
+        }))
+    }
 
-        async fn get_quotes_for_pools(&self, pools: Vec<H160>) -> Result<Vec<(H160, SellQuote)>> {
+    async fn get_quotes_for_pools(&self, pools: Vec<H160>) -> Result<Vec<(H160, SellQuote)>> {
             if pools.is_empty() {
                 return Ok(vec![]);
             }
@@ -305,37 +296,37 @@ mod ethers_impl {
             Ok(results)
         }
 
-        fn update_internal_pool_state(&mut self, pools_and_quotes: Vec<(H160, SellQuote)>) {
-            for (pool_address, quote) in pools_and_quotes {
-                if quote.quote_available {
-                    self.pool_bids.insert(pool_address, quote.price);
-                    self.sudo_pools
-                        .entry(quote.nft_address)
+    fn update_internal_pool_state(&mut self, pools_and_quotes: Vec<(H160, SellQuote)>) {
+        for (pool_address, quote) in pools_and_quotes {
+            if quote.quote_available {
+                self.pool_bids.insert(pool_address, quote.price);
+                self.sudo_pools
+                    .entry(quote.nft_address)
                         .or_insert_with(BinaryHeap::new)
                         .push(PoolBidEntry {
                             pool: pool_address,
                             bid: quote.price,
                         });
                 } else {
-                    self.pool_bids.remove(&pool_address);
-                }
+                self.pool_bids.remove(&pool_address);
             }
         }
+    }
 
-        async fn get_touched_pools(&self, from_block: u64, to_block: u64) -> Result<Vec<H160>> {
-            let address_list = self.pool_bids.keys().cloned().collect::<Vec<_>>();
-            let filter = Filter::new()
-                .from_block(from_block)
-                .to_block(to_block)
-                .address(address_list)
-                .events(&*POOL_EVENT_SIGNATURES);
+    async fn get_touched_pools(&self, from_block: u64, to_block: u64) -> Result<Vec<H160>> {
+        let address_list = self.pool_bids.keys().cloned().collect::<Vec<_>>();
+        let filter = Filter::new()
+            .from_block(from_block)
+            .to_block(to_block)
+            .address(address_list)
+            .events(&*POOL_EVENT_SIGNATURES);
 
-            let events = self.client.get_logs(&filter).await?;
-            let touched_pools = events.iter().map(|event| event.address).collect::<Vec<_>>();
-            Ok(touched_pools)
-        }
+        let events = self.client.get_logs(&filter).await?;
+        let touched_pools = events.iter().map(|event| event.address).collect::<Vec<_>>();
+        Ok(touched_pools)
+    }
 
-        async fn get_new_pools(&self, from_block: u64, to_block: u64) -> Result<Vec<H160>> {
+    async fn get_new_pools(&self, from_block: u64, to_block: u64) -> Result<Vec<H160>> {
             if to_block < from_block {
                 return Ok(vec![]);
             }
@@ -359,10 +350,10 @@ mod ethers_impl {
                     let factory = lssvm.clone();
                     async move {
                         let events = factory
-                            .event::<NewPairFilter>()
+                .event::<NewPairFilter>()
                             .from_block(start)
                             .to_block(end)
-                            .query()
+                .query()
                             .await?;
                         info!(
                             "found {} new pools in block range {}-{} (progress {:.0}%)",

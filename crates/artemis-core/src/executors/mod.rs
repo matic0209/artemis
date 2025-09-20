@@ -11,4 +11,5 @@ pub mod mempool_alloy_executor;
 /// Alloy-based Flashbots executor (using alloy-mev).
 pub mod flashbots_alloy_executor;
 
-// TODO: Re-implement MEV-share executor with Alloy
+/// Alloy-based MEV-share executor (using alloy-mev).
+pub mod mev_share_alloy_executor;

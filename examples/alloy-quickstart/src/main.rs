@@ -1,4 +1,3 @@
-#![cfg(feature = "sdk-alloy")]
 
 use anyhow::Result;
 use artemis_core::eth::alloy_support::{helpers, Provider};
