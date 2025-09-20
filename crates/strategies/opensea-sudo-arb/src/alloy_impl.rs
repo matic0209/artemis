@@ -223,6 +223,10 @@
         }
 
         fn update_internal_pool_state(&mut self, pools_and_quotes: Vec<(H160, SellQuote)>) {
+            let start = Instant::now();
+            let mut quotes_available = 0;
+            let mut quotes_removed = 0;
+            
             for (pool_address, quote) in pools_and_quotes {
                 if quote.quoteAvailable {
                     let price = from_alloy_u256(quote.price);
@@ -234,10 +238,17 @@
                             pool: pool_address,
                             bid: price,
                         });
+                    quotes_available += 1;
                 } else {
                     self.pool_bids.remove(&pool_address);
+                    quotes_removed += 1;
                 }
             }
+            
+            let elapsed = start.elapsed();
+            histogram!("artemis.strategies.opensea.state_update_duration").record(elapsed.as_millis() as f64);
+            counter!("artemis.strategies.opensea.quotes_available").increment(quotes_available);
+            counter!("artemis.strategies.opensea.quotes_removed").increment(quotes_removed);
         }
 
         #[allow(dead_code)]

@@ -20,13 +20,13 @@ pub mod helpers {
     use std::str::FromStr;
 
     pub async fn create_ws_provider(url: &str) -> Result<Provider> {
-        super::Provider::connect(url)
+        Provider::connect(url)
             .await
             .map_err(|err| anyhow!("failed to connect alloy ws provider: {err}"))
     }
 
     pub async fn create_http_provider(url: &str) -> Result<Provider> {
-        super::Provider::connect(url)
+        Provider::connect(url)
             .await
             .map_err(|err| anyhow!("failed to connect alloy http provider: {err}"))
     }
@@ -68,6 +68,24 @@ pub mod helpers {
     pub async fn estimate_gas_alloy(provider: &Provider, tx: &TxRequest) -> Result<U256> {
         let gas = ProviderTrait::estimate_gas(provider, tx.clone()).await?;
         Ok(U256::from(gas))
+    }
+
+    /// Get multiple balances concurrently for better performance
+    pub async fn get_balances_batch(
+        provider: &Provider,
+        addresses: &[Address],
+        block: Option<BlockNumberOrTag>,
+    ) -> Result<Vec<U256>> {
+        use futures::future::try_join_all;
+        
+        let balance_futures: Vec<_> = addresses.iter()
+            .map(|&addr| async move {
+                let balance = ProviderTrait::get_balance(provider, addr).await;
+                balance.map_err(|e| anyhow!("failed to get balance: {e}"))
+            })
+            .collect();
+            
+        try_join_all(balance_futures).await
     }
 }
 

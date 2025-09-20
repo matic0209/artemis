@@ -98,23 +98,20 @@ where
     P: Provider<Ethereum> + WalletProvider<Ethereum> + Send + Sync + 'static,
 {
     async fn execute(&self, mut action: SubmitTxToMempool) -> Result<()> {
-        let cache_key = GasCacheKey::new(&action.tx);
-        let gas_usage = self.estimate_gas_cached(&action.tx, cache_key).await?;
-
-        let bid_gas_price_u128 = if let Some(gas_bid_info) = action.gas_bid_info {
+        // Use gas bid info if available, otherwise let Alloy fillers handle gas pricing
+        if let Some(gas_bid_info) = action.gas_bid_info {
+            let cache_key = GasCacheKey::new(&action.tx);
+            let gas_usage = self.estimate_gas_cached(&action.tx, cache_key).await?;
+            
             let breakeven_gas_price = gas_bid_info.total_profit / gas_usage;
             let bid_gas_price = breakeven_gas_price
                 .mul(U256::from(gas_bid_info.bid_percentage))
                 .div(U256::from(100u64));
-            u128::try_from(bid_gas_price).map_err(|_| anyhow!("gas price exceeds u128"))?
-        } else {
-            self.provider
-                .get_gas_price()
-                .await
-                .context("error getting gas price")?
-        };
-
-        action.tx.gas_price = Some(bid_gas_price_u128);
+            
+            action.tx.gas_price = Some(u128::try_from(bid_gas_price)
+                .map_err(|_| anyhow!("gas price exceeds u128"))?);
+        }
+        // If no gas bid info, let Alloy fillers automatically set gas price
 
         let pending = self
             .provider
@@ -124,6 +121,8 @@ where
 
         // Register the pending transaction but don't block on confirmation.
         let _ = pending.register().await;
+        
+        metrics::counter!("artemis.executors.mempool.transactions_sent").increment(1);
         Ok(())
     }
 }

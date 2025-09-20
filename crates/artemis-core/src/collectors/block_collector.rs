@@ -11,6 +11,7 @@ use tokio_stream::StreamExt;
 /// [events](NewBlock) which contain the block number and hash.
 pub struct BlockCollector<P> {
     provider: Arc<P>,
+    buffer_size: usize,
 }
 
 /// A new block event, containing the block number and hash.
@@ -22,7 +23,16 @@ pub struct NewBlock {
 
 impl<P> BlockCollector<P> {
     pub fn new(provider: Arc<P>) -> Self {
-        Self { provider }
+        Self { 
+            provider,
+            buffer_size: 1024,
+        }
+    }
+
+    /// Configure the internal buffer size for backpressure handling
+    pub fn with_buffer_size(mut self, size: usize) -> Self {
+        self.buffer_size = size;
+        self
     }
 }
 
@@ -34,21 +44,24 @@ where
     P: alloy_provider::Provider + Send + Sync + 'static,
 {
     async fn get_event_stream(&self) -> Result<CollectorStream<'_, NewBlock>> {
-        let (tx, rx) = mpsc::channel::<NewBlock>(1024);
+        let (tx, rx) = mpsc::channel::<NewBlock>(self.buffer_size);
         let provider = self.provider.clone();
         tokio::spawn(async move {
             if let Ok(stream) = provider.subscribe_blocks().await {
                 let mut stream = stream.into_stream();
                 while let Some(block) = stream.next().await {
-                    if let (hash, number) = (block.hash, block.number) {
-                        let new_block = NewBlock { 
-                            hash, 
-                            number: U64::from(number) 
-                        };
-                        if tx.send(new_block).await.is_err() {
-                            break;
-                        }
+                    let (hash, number) = (block.hash, block.number);
+                    let new_block = NewBlock { 
+                        hash, 
+                        number: U64::from(number) 
+                    };
+                    
+                    if tx.send(new_block).await.is_err() {
+                        break;
                     }
+                    
+                    metrics::counter!("artemis.collectors.blocks.processed").increment(1);
+                    metrics::gauge!("artemis.collectors.blocks.latest_number").set(number as f64);
                 }
             }
         });

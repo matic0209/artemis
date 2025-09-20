@@ -48,6 +48,18 @@ pub struct Args {
     /// Percentage of profit to pay in gas.
     #[arg(long)]
     pub bid_percentage: u64,
+
+    /// Block collector buffer size (default: 1024)
+    #[arg(long, default_value = "1024")]
+    pub block_buffer_size: usize,
+
+    /// Mempool collector buffer size (default: 2048)
+    #[arg(long, default_value = "2048")]
+    pub mempool_buffer_size: usize,
+
+    /// Minimum transaction value to process in wei (default: 0)
+    #[arg(long, default_value = "0")]
+    pub min_tx_value: u128,
 }
 
 #[tokio::main]
@@ -86,7 +98,10 @@ async fn run_cli(args: Args) -> Result<()> {
 
     let mut engine: Engine<Event, Action> = Engine::default();
 
-    let block_collector = Box::new(BlockCollector::new(Arc::clone(&provider)));
+    // Configure block collector with custom buffer size
+    let block_collector = BlockCollector::new(Arc::clone(&provider))
+        .with_buffer_size(args.block_buffer_size);
+    let block_collector = Box::new(block_collector);
     let block_collector = CollectorMap::new(block_collector, Event::NewBlock);
     engine.add_collector(Box::new(block_collector));
 
