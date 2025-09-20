@@ -3,12 +3,7 @@ use artemis_core::{
     collectors::{block_collector::NewBlock, opensea_order_collector::OpenseaOrder},
     executors::mempool_types::SubmitTxToMempool,
 };
-#[cfg(feature = "sdk-ethers")]
-use bindings::sudo_opensea_arb::{AdditionalRecipient, BasicOrderParameters};
-#[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
 use bindings::{AdditionalRecipient, BasicOrderParameters};
-
-#[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
 use alloy_primitives::Bytes as AlloyBytes;
 use opensea_v2::types::{
     Chain, FulfillListingRequest, FulfillListingResponse, Fulfiller, Listing, ProtocolVersion,
@@ -49,44 +44,6 @@ pub fn hash_to_fulfill_listing_request(hash: H256) -> FulfillListingRequest {
 }
 
 /// Convenience function to convert a fulfill listing response to basic order parameters
-#[cfg(feature = "sdk-ethers")]
-pub fn fulfill_listing_response_to_basic_order_parameters(
-    val: &FulfillListingResponse,
-) -> BasicOrderParameters {
-    let params = &val.fulfillment_data.transaction.input_data.parameters;
-
-    let recipients: Vec<AdditionalRecipient> = params
-        .additional_recipients
-        .iter()
-        .map(|ar| AdditionalRecipient {
-            recipient: ar.recipient,
-            amount: ar.amount,
-        })
-        .collect();
-
-    BasicOrderParameters {
-        consideration_token: params.consideration_token,
-        consideration_identifier: params.consideration_identifier,
-        consideration_amount: params.consideration_amount,
-        offerer: params.offerer,
-        zone: params.zone,
-        offer_token: params.offer_token,
-        offer_identifier: params.offer_identifier,
-        offer_amount: params.offer_amount,
-        basic_order_type: params.basic_order_type,
-        start_time: params.start_time,
-        end_time: params.end_time,
-        zone_hash: params.zone_hash.into(),
-        salt: params.salt,
-        offerer_conduit_key: params.offerer_conduit_key.into(),
-        fulfiller_conduit_key: params.fulfiller_conduit_key.into(),
-        total_original_additional_recipients: params.total_original_additional_recipients,
-        additional_recipients: recipients,
-        signature: params.signature.clone(),
-    }
-}
-
-#[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
 pub fn fulfill_listing_response_to_basic_order_parameters(
     val: &FulfillListingResponse,
 ) -> BasicOrderParameters {
@@ -121,4 +78,26 @@ pub fn fulfill_listing_response_to_basic_order_parameters(
         additionalRecipients: recipients,
         signature: AlloyBytes::copy_from_slice(params.signature.as_ref()),
     }
+}
+
+/// Convert artemis Address (H160) to alloy Address
+pub fn to_alloy_address(addr: H160) -> alloy_primitives::Address {
+    alloy_primitives::Address::from(addr.0)
+}
+
+/// Convert alloy Address to artemis Address (H160)
+pub fn from_alloy_address(addr: alloy_primitives::Address) -> H160 {
+    H160(addr.0)
+}
+
+/// Convert artemis U256 to alloy U256
+pub fn to_alloy_u256(val: &artemis_core::eth::U256) -> alloy_primitives::U256 {
+    let bytes: [u8; 32] = val.to_be_bytes();
+    alloy_primitives::U256::from_be_bytes(bytes)
+}
+
+/// Convert alloy U256 to artemis U256
+pub fn from_alloy_u256(val: alloy_primitives::U256) -> artemis_core::eth::U256 {
+    let bytes: [u8; 32] = val.to_be_bytes();
+    artemis_core::eth::U256::from_be_bytes(bytes)
 }
