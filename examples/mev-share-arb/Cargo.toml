@@ -9,30 +9,18 @@ license = "MIT OR Apache-2.0"
 tokio = { version = "1.18", features = ["full"] }
 dotenv = "0.15.0"
 async-trait = "0.1.64"
-artemis-core = { path = "../../crates/artemis-core", default-features = false }
+artemis-core = { path = "../../crates/artemis-core" }
 futures = "0.3.27"
-mev-share-uni-arb = { path = "../../crates/strategies/mev-share-uni-arb", default-features = false }
+mev-share-uni-arb = { path = "../../crates/strategies/mev-share-uni-arb" }
 mev-share = "0.1.4"
 anyhow = "1.0.70"
 tracing = "0.1.37"
 tracing-subscriber = "0.3.16"
 clap = { version = "4.2.5", features = ["derive"] }
-alloy-provider = { version = "1", optional = true, default-features = false, features = ["ws"] }
-alloy-transport-ws = { version = "1", optional = true }
-alloy-rpc-types-mev = { version = "1", optional = true }
-alloy-primitives = { version = "1", optional = true }
+alloy-provider = { version = "1", default-features = false, features = ["ws"] }
+alloy-transport-ws = { version = "1" }
+alloy-rpc-types-mev = { version = "1" }
+alloy-primitives = { version = "1" }
 
 [features]
-default = ["sdk-alloy"]
-sdk-ethers = [
-    "artemis-core/sdk-ethers",
-    "mev-share-uni-arb/sdk-ethers",
-]
-sdk-alloy = [
-    "artemis-core/sdk-alloy",
-    "mev-share-uni-arb/sdk-alloy",
-    "dep:alloy-provider",
-    "dep:alloy-transport-ws",
-    "dep:alloy-rpc-types-mev",
-    "dep:alloy-primitives",
-]
+default = []

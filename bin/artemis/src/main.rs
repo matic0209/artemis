@@ -20,28 +20,10 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 
-#[cfg(all(feature = "sdk-ethers", feature = "sdk-alloy"))]
-compile_error!("Enable only one of `sdk-ethers` or `sdk-alloy` for the Artemis CLI.");
-
-#[cfg(not(any(feature = "sdk-ethers", feature = "sdk-alloy")))]
-compile_error!("Enable either `sdk-ethers` or `sdk-alloy` feature for the Artemis CLI.");
-
-#[cfg(feature = "sdk-ethers")]
-use artemis_core::eth::{
-    helpers as ethers_helpers, LocalWallet as EthersWallet, MiddlewareBuilder, Signer,
-};
-#[cfg(feature = "sdk-ethers")]
-use artemis_core::executors::mempool_executor::MempoolExecutor;
-
-#[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
 use alloy_provider::ProviderBuilder;
-#[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
 use alloy_transport_ws::WsConnect;
-#[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
-use artemis_core::eth::alloy_support::{helpers as alloy_helpers, LocalWallet as AlloyWallet};
-#[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
+use artemis_core::eth::{helpers, LocalWallet};
 use artemis_core::executors::mempool_alloy_executor::MempoolAlloyExecutor;
-#[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
 use artemis_core::executors::flashbots_alloy_executor::FlashbotsAlloyExecutor;
 
 /// CLI Options.
@@ -88,53 +70,8 @@ async fn main() -> Result<()> {
     run_cli(args).await
 }
 
-#[cfg(feature = "sdk-ethers")]
 async fn run_cli(args: Args) -> Result<()> {
-    let provider = ethers_helpers::create_ws_provider(&args.wss).await?;
-    let wallet: EthersWallet = ethers_helpers::parse_local_wallet(&args.private_key)?;
-    let address = wallet.address();
-    let provider = Arc::new(provider.nonce_manager(address).with_signer(wallet));
-
-    let opensea_client = OpenSeaV2Client::new(OpenSeaApiConfig {
-        api_key: args.opensea_api_key.clone(),
-    });
-
-    let mut engine: Engine<Event, Action> = Engine::default();
-
-    let block_collector = Box::new(BlockCollector::new(Arc::clone(&provider)));
-    let block_collector = CollectorMap::new(block_collector, Event::NewBlock);
-    engine.add_collector(Box::new(block_collector));
-
-    let opensea_collector = Box::new(OpenseaOrderCollector::new(args.opensea_api_key));
-    let opensea_collector =
-        CollectorMap::new(opensea_collector, |e| Event::OpenseaOrder(Box::new(e)));
-    engine.add_collector(Box::new(opensea_collector));
-
-    let config = Config {
-        arb_contract_address: Address::from_str(&args.arb_contract_address)?,
-        bid_percentage: args.bid_percentage,
-    };
-    let strategy = OpenseaSudoArb::new(Arc::clone(&provider), opensea_client, config);
-    engine.add_strategy(Box::new(strategy));
-
-    let executor = Box::new(MempoolExecutor::new(Arc::clone(&provider)));
-    let executor = ExecutorMap::new(executor, |action| match action {
-        Action::SubmitTx(tx) => Some(tx),
-    });
-    engine.add_executor(Box::new(executor));
-
-    if let Ok(mut set) = engine.run().await {
-        while let Some(res) = set.join_next().await {
-            info!("res: {:?}", res);
-        }
-    }
-
-    Ok(())
-}
-
-#[cfg(all(feature = "sdk-alloy", not(feature = "sdk-ethers")))]
-async fn run_cli(args: Args) -> Result<()> {
-    let wallet: AlloyWallet = alloy_helpers::parse_local_wallet(&args.private_key)?;
+    let wallet: LocalWallet = helpers::parse_local_wallet(&args.private_key)?;
     let connect = WsConnect::new(&args.wss);
     let provider = ProviderBuilder::new()
         .wallet(wallet)

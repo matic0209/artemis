@@ -8,10 +8,8 @@ edition = "2021"
 [dependencies]
 
 ## eth
-ethers = { workspace = true, optional = true }
 opensea-stream = { git = "https://github.com/FrankieIsLost/opensea-stream-rs"}
 mev-share = "0.1.4"
-ethers-flashbots = { git = "https://github.com/FrankieIsLost/ethers-flashbots", features = ["rustls"], optional = true }
 
 ## async
 async-trait = "0.1.64"
@@ -28,41 +26,19 @@ tracing = "0.1.37"
 tower = { version = "0.4.13", optional = true }
 metrics = "0.22"
 dashmap = "5"
-alloy-provider = { version = "1", optional = true, features = ["ws", "reqwest"] }
-alloy-transport-ws = { version = "1", optional = true }
-alloy-transport-http = { version = "1", optional = true }
-alloy-rpc-types-eth = { version = "1", optional = true }
-alloy-signer-local = { version = "1", optional = true }
-alloy-primitives = { version = "1", optional = true }
-alloy-rpc-types = { version = "1", optional = true }
-alloy-mev = { version = "1.0.0", optional = true }
-alloy = { version = "1", optional = true }
-alloy-signer = { version = "1", optional = true }
-alloy-network = { version = "1", optional = true }
+alloy-provider = { version = "1", features = ["ws", "reqwest"] }
+alloy-transport-ws = { version = "1" }
+alloy-transport-http = { version = "1" }
+alloy-rpc-types-eth = { version = "1" }
+alloy-signer-local = { version = "1" }
+alloy-primitives = { version = "1" }
+alloy-rpc-types = { version = "1" }
+alloy-mev = { version = "1.0.0" }
+alloy = { version = "1" }
+alloy-signer = { version = "1" }
+alloy-network = { version = "1" }
 
 [features]
-default = ["sdk-alloy"]
-sdk-ethers = [
-    "dep:ethers",
-    "dep:ethers-flashbots",
-    "dep:futures",
-    "dep:reqwest",
-    "dep:jsonrpsee",
-    "dep:thiserror",
-    "dep:tower",
-]
-sdk-alloy = [
-    "dep:alloy-provider",
-    "dep:alloy-transport-ws",
-    "dep:alloy-transport-http",
-    "dep:alloy-signer-local",
-    "dep:alloy-primitives",
-    "dep:alloy-rpc-types",
-    "dep:alloy-mev",
-    "dep:alloy-rpc-types-eth",
-    "dep:alloy",
-    "dep:alloy-signer",
-    "dep:alloy-network",
-]
+default = []
 
 # Optional Alloy deps for future migration. Not used unless `sdk-alloy` is enabled.

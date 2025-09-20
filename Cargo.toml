@@ -17,8 +17,6 @@ resolver = "2"
 
 [workspace.dependencies]
 ## eth
-ethers = { version = "2", features = ["ws", "rustls"]}
-ethers-signers = "2.0"
 serde = { version = "1.0.205", features = ["derive"] }
 
 [profile.release]

@@ -3,26 +3,15 @@
 //! We keep these helpers separate so downstream modules can start importing
 //! Alloy primitives while we gradually migrate off ethers-rs.
 
-#[cfg(feature = "sdk-alloy")]
 pub use alloy_primitives::{Address, Bytes, B256 as Hash, U256};
-
-#[cfg(feature = "sdk-alloy")]
 pub use alloy_rpc_types_eth::{BlockId, BlockNumberOrTag, Filter, Log, Transaction};
-
-#[cfg(feature = "sdk-alloy")]
 pub use alloy_provider::RootProvider as Provider;
-
-#[cfg(feature = "sdk-alloy")]
 pub use alloy_signer_local::PrivateKeySigner as LocalWallet;
 
 /// Convenience alias to mirror `ethers::types::U64` in examples/tests.
-#[cfg(feature = "sdk-alloy")]
 pub type U64 = alloy_primitives::U64;
-
-#[cfg(feature = "sdk-alloy")]
 pub type TxRequest = alloy_rpc_types_eth::transaction::TransactionRequest;
 
-#[cfg(feature = "sdk-alloy")]
 pub mod helpers {
     use super::*;
     use alloy_primitives::keccak256;
