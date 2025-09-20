@@ -4,11 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["sdk-alloy"]
-sdk-ethers = ["dep:ethers"]
-sdk-alloy = ["dep:alloy-contract", "dep:alloy-sol-types"]
+default = []
 
 [dependencies]
-ethers = { version = "2", default-features = false, features = ["abigen"], optional = true }
-alloy-contract = { version = "1", optional = true }
-alloy-sol-types = { version = "1", optional = true }
+alloy-contract = { version = "1" }
+alloy-sol-types = { version = "1" }
