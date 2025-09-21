@@ -87,8 +87,15 @@ impl SandwichMempoolCollector {
 
         // 检查是否与目标代币交互
         if !self.target_tokens.is_empty() {
-            // TODO: 解析交易数据检查代币交互
-            // 这里需要解析 calldata 来检测代币交互
+            // 解析交易数据检查代币交互
+            if let Some(input) = TransactionTrait::input(&tx.inner) {
+                let tokens = crate::utils::extract_tokens_from_calldata(input);
+                for token in tokens {
+                    if self.target_tokens.contains(&token) {
+                        return true;
+                    }
+                }
+            }
         }
 
         // 检查交易数据是否包含 DEX 相关的函数选择器
@@ -255,7 +262,14 @@ impl TransactionFilter {
         }
 
         // 过滤黑名单代币
-        // TODO: 解析 calldata 检查代币地址
+        if let Some(input) = TransactionTrait::input(&tx.inner) {
+            let tokens = crate::utils::extract_tokens_from_calldata(input);
+            for token in tokens {
+                if self.token_blacklist.contains(&token) {
+                    return true; // 过滤掉包含黑名单代币的交易
+                }
+            }
+        }
 
         false
     }
