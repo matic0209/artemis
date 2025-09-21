@@ -47,6 +47,8 @@ pub mod state_manager;
 pub mod connection_pool;
 /// Adaptive performance tuner for automatic optimization.
 pub mod adaptive_tuner;
+/// Performance benchmark suite for optimization validation.
+pub mod benchmarks;
 
 use alloy as _;
 use alloy_mev as _;

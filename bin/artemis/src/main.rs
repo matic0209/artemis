@@ -72,6 +72,14 @@ pub struct Args {
     /// Block building algorithm (max-profit, mev-gas-price, type-max-profit)
     #[arg(long, default_value = "max-profit")]
     pub rbuilder_algorithm: String,
+
+    /// Run performance benchmark instead of normal operation
+    #[arg(long)]
+    pub benchmark: bool,
+
+    /// Number of benchmark iterations (default: 100)
+    #[arg(long, default_value = "100")]
+    pub benchmark_iterations: usize,
 }
 
 #[tokio::main]
@@ -91,6 +99,12 @@ async fn main() -> Result<()> {
     info!("metrics_server" = %metrics_addr, "metrics server started");
 
     let args = Args::parse();
+    
+    // Run benchmark if requested
+    if args.benchmark {
+        return run_benchmark(args).await;
+    }
+    
     run_cli(args).await
 }
 
@@ -171,6 +185,45 @@ async fn run_cli(args: Args) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+async fn run_benchmark(args: Args) -> Result<()> {
+    use artemis_core::benchmarks::PerformanceBenchmark;
+    
+    println!("🚀 Artemis Performance Benchmark Mode");
+    println!("Setting up provider connection...");
+    
+    // Create provider for benchmarking
+    let wallet: LocalWallet = helpers::parse_local_wallet(&args.private_key)?;
+    let connect = WsConnect::new(&args.wss);
+    let provider = ProviderBuilder::new()
+        .wallet(wallet)
+        .connect_ws(connect)
+        .await
+        .context("failed to connect provider for benchmark")?;
+    let provider = Arc::new(provider);
+    
+    // Run benchmark
+    let benchmark = PerformanceBenchmark::new(provider, args.benchmark_iterations);
+    
+    println!("Running RPC performance test...");
+    let rpc_latency = benchmark.benchmark_rpc_calls().await?;
+    
+    println!("Running engine comparison...");
+    let results = benchmark.run_comparison().await?;
+    
+    // Print comprehensive report
+    benchmark.print_report(&results);
+    
+    println!("\n🌐 RPC Performance: {:.2}ms for 10 concurrent calls", rpc_latency.as_millis());
+    
+    // Recommendations based on results
+    if results.improvement_percentage > 30.0 {
+        println!("\n🎯 RECOMMENDATION: Enable optimizations for production use!");
+        println!("Add --features rbuilder-integration to your build command");
+    }
+    
     Ok(())
 }
 

@@ -53,7 +53,7 @@ pub struct EngineV2<E, A> {
 impl<E, A> EngineV2<E, A>
 where
     E: Send + Sync + Clone + 'static,
-    A: Send + Sync + 'static,
+    A: Send + Sync + Clone + 'static,
 {
     pub fn new() -> Self {
         Self {

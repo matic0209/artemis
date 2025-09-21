@@ -6,6 +6,7 @@ use lru::LruCache;
 use anyhow::Result;
 
 use crate::eth::{Address, U256, Provider};
+use alloy_provider::Provider as ProviderTrait;
 
 /// Intelligent state management with predictive caching
 pub struct StateManager {
@@ -78,19 +79,19 @@ impl StateManager {
             if let Some(cached) = cache.peek(&key) {
                 if self.is_cache_valid(cached, 5).await {
                     self.record_cache_hit().await;
-                    return Ok(U256::from_be_bytes(
-                        cached.data.as_slice().try_into().unwrap_or_default()
-                    ));
+                    let bytes: [u8; 32] = cached.data.as_slice().try_into().unwrap_or_default();
+                    return Ok(U256::from_be_bytes(bytes));
                 }
             }
         }
 
         // Cache miss - fetch from provider
         self.record_cache_miss().await;
-        let balance = self.provider.get_balance(address).await?;
+        let balance = ProviderTrait::get_balance(&*self.provider, address).await?;
         
         // Store in cache
-        self.cache_value(key, balance.to_be_bytes().to_vec()).await;
+        let bytes: [u8; 32] = balance.to_be_bytes();
+        self.cache_value(key, bytes.to_vec()).await;
         
         // Update access pattern for prediction
         self.update_access_pattern(address).await;
@@ -110,9 +111,8 @@ impl StateManager {
                 let key = StateKey::Balance(address);
                 if let Some(cached) = cache.peek(&key) {
                     if self.is_cache_valid(cached, 5).await {
-                        results.push(U256::from_be_bytes(
-                            cached.data.as_slice().try_into().unwrap_or_default()
-                        ));
+                        let bytes: [u8; 32] = cached.data.as_slice().try_into().unwrap_or_default();
+                        results.push(U256::from_be_bytes(bytes));
                         continue;
                     }
                 }
@@ -125,7 +125,8 @@ impl StateManager {
             let balances = self.fetch_balances_batch(&uncached_addresses).await?;
             for (address, balance) in uncached_addresses.iter().zip(balances.iter()) {
                 let key = StateKey::Balance(*address);
-                self.cache_value(key, balance.to_be_bytes().to_vec()).await;
+                let bytes: [u8; 32] = balance.to_be_bytes();
+                self.cache_value(key, bytes.to_vec()).await;
                 results.push(*balance);
             }
         }
@@ -157,7 +158,8 @@ impl StateManager {
                     if let Ok(balances) = manager.fetch_balances_batch(&addresses_to_prefetch).await {
                         for (address, balance) in addresses_to_prefetch.iter().zip(balances.iter()) {
                             let key = StateKey::Balance(*address);
-                            manager.cache_value(key, balance.to_be_bytes().to_vec()).await;
+                            let bytes: [u8; 32] = balance.to_be_bytes();
+                            manager.cache_value(key, bytes.to_vec()).await;
                         }
                         
                         let mut stats = manager.stats.write().await;
@@ -213,7 +215,12 @@ impl StateManager {
 
     /// Get cache statistics
     pub async fn get_stats(&self) -> CacheStats {
-        self.stats.read().await.clone()
+        let stats = self.stats.read().await;
+        CacheStats {
+            hits: stats.hits,
+            misses: stats.misses,
+            prefetch_hits: stats.prefetch_hits,
+        }
     }
 }
 
