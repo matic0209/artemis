@@ -39,6 +39,14 @@ pub mod executors;
 pub mod types;
 /// This module contains utilities for working with Artemis.
 pub mod utilities;
+/// Enhanced engine with optimized event processing.
+pub mod engine_v2;
+/// Intelligent state management with predictive caching.
+pub mod state_manager;
+/// High-performance connection pool for Ethereum providers.
+pub mod connection_pool;
+/// Adaptive performance tuner for automatic optimization.
+pub mod adaptive_tuner;
 
 use alloy as _;
 use alloy_mev as _;
