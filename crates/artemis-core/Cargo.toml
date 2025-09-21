@@ -27,23 +27,23 @@ tower = { version = "0.4.13" }
 metrics = "0.22"
 dashmap = "5"
 serde_json = "1.0"
-alloy-provider = { version = "1", features = ["ws", "reqwest"] }
-alloy-transport-ws = { version = "1" }
-alloy-transport-http = { version = "1" }
-alloy-rpc-types-eth = { version = "1" }
-alloy-signer-local = { version = "1" }
-alloy-primitives = { version = "1" }
-alloy-rpc-types = { version = "1" }
+# Pin to same Alloy versions as rbuilder for compatibility
+alloy-provider = { version = "1.0.27", features = ["ws", "reqwest"] }
+alloy-transport-ws = { version = "1.0.27" }
+alloy-transport-http = { version = "1.0.27" }
+alloy-rpc-types-eth = { version = "1.0.27" }
+alloy-signer-local = { version = "1.0.27" }
+alloy-primitives = { version = "1.3.1" }
+alloy-rpc-types = { version = "1.0.27" }
 alloy-mev = { version = "1.0.0" }
-alloy = { version = "1" }
-alloy-signer = { version = "1" }
-alloy-network = { version = "1" }
-# rbuilder integration (optional)
-rbuilder = { git = "https://github.com/flashbots/rbuilder.git", optional = true }
+alloy = { version = "1.0.27" }
+alloy-signer = { version = "1.0.27" }
+alloy-network = { version = "1.0.27" }
+# rbuilder integration (optional) - JSON-RPC client only, no direct dependency
 uuid = { version = "1.6", optional = true }
 
 [features]
 default = []
-rbuilder-integration = ["dep:rbuilder", "dep:uuid"]
+rbuilder-integration = ["dep:uuid"]
 
 # Optional Alloy deps for future migration. Not used unless `sdk-alloy` is enabled.
