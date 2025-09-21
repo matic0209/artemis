@@ -1,0 +1,255 @@
+use std::sync::Arc;
+use anyhow::{anyhow, Result};
+use tracing::{debug, info};
+
+use artemis_core::eth::{Provider, Address, U256};
+use crate::types::{SandwichOpportunity, BlockInfo, TokenInventory};
+
+/// 高性能 Sandwich 模拟器
+pub struct SandwichSimulator {
+    provider: Arc<Provider>,
+    // TODO: 添加 revm 实例
+}
+
+impl SandwichSimulator {
+    pub fn new(provider: Arc<Provider>) -> Self {
+        Self { provider }
+    }
+
+    pub async fn initialize(&mut self, pools: &std::collections::HashMap<Address, cfmms::pool::Pool>) -> Result<()> {
+        info!("🧪 初始化 Sandwich 模拟器，池子数量: {}", pools.len());
+        // TODO: 设置 revm 环境和池子状态
+        Ok(())
+    }
+
+    /// 模拟 sandwich 攻击，返回利润和最优输入
+    pub async fn simulate_sandwich(
+        &self,
+        opportunity: &SandwichOpportunity,
+        block: &BlockInfo,
+    ) -> Result<(U256, U256)> {
+        debug!("🧪 模拟 Sandwich 机会");
+        
+        // TODO: 完整的 revm 模拟实现
+        // 1. 设置区块环境
+        // 2. 创建前置交易（买入中间代币）
+        // 3. 执行受害者交易
+        // 4. 创建后置交易（卖出中间代币）
+        // 5. 计算净利润
+
+        // 暂时返回估算值
+        let estimated_profit = self.estimate_profit_heuristic(opportunity, block).await?;
+        let optimal_input = self.calculate_optimal_input(opportunity, block).await?;
+
+        Ok((estimated_profit, optimal_input))
+    }
+
+    /// 启发式利润估算（快速）
+    async fn estimate_profit_heuristic(
+        &self,
+        opportunity: &SandwichOpportunity,
+        block: &BlockInfo,
+    ) -> Result<U256> {
+        // 基于交易价值和池子流动性的快速估算
+        let victim_value = opportunity.victim_txs
+            .iter()
+            .filter_map(|tx| tx.inner.value())
+            .sum::<u128>();
+
+        // 估算滑点影响
+        let estimated_slippage = victim_value as f64 / 1e18 * 0.003; // 0.3% 滑点
+        let estimated_profit_eth = estimated_slippage * 0.5; // 捕获 50% 的滑点
+
+        // 转换为 wei
+        let profit_wei = (estimated_profit_eth * 1e18) as u128;
+        
+        Ok(U256::from(profit_wei))
+    }
+
+    /// 计算最优输入金额
+    async fn calculate_optimal_input(
+        &self,
+        opportunity: &SandwichOpportunity,
+        _block: &BlockInfo,
+    ) -> Result<U256> {
+        // 基于受害者交易价值计算最优输入
+        let victim_value = opportunity.victim_txs
+            .iter()
+            .filter_map(|tx| tx.inner.value())
+            .sum::<u128>();
+
+        // 最优输入通常是受害者交易价值的 2-5 倍
+        let optimal_input = victim_value * 3;
+        
+        Ok(U256::from(optimal_input))
+    }
+
+    /// 详细的 revm 模拟（精确但较慢）
+    pub async fn simulate_detailed(
+        &self,
+        opportunity: &SandwichOpportunity,
+        block: &BlockInfo,
+        inventory: &TokenInventory,
+    ) -> Result<(U256, u64, u64)> {
+        // TODO: 实现完整的 revm 模拟
+        // 返回：(净利润, 前置交易 gas, 后置交易 gas)
+        
+        let net_profit = U256::from(1_000_000_000_000_000u64); // 0.001 ETH
+        let frontrun_gas = 150_000u64;
+        let backrun_gas = 120_000u64;
+        
+        Ok((net_profit, frontrun_gas, backrun_gas))
+    }
+
+    /// 检查代币是否安全（Salmonella 检查）
+    pub async fn check_token_safety(&self, token: Address) -> Result<bool> {
+        // TODO: 实现 Salmonella 检查
+        // 检查代币的 transfer 函数是否使用异常操作码
+        
+        debug!("🦠 检查代币安全性: {:?}", token);
+        
+        // 暂时返回安全
+        Ok(true)
+    }
+
+    /// 估算交易的滑点影响
+    pub fn estimate_slippage_impact(
+        &self,
+        amount: U256,
+        pool_liquidity: U256,
+    ) -> f64 {
+        if pool_liquidity.is_zero() {
+            return 0.0;
+        }
+
+        // 简化的滑点计算：amount / liquidity
+        let impact = amount.to::<u128>() as f64 / pool_liquidity.to::<u128>() as f64;
+        
+        // 限制在合理范围内
+        impact.min(0.1).max(0.0001) // 0.01% - 10%
+    }
+}
+
+/// Bundle 构建器
+pub mod bundle_builder {
+    use super::*;
+    use crate::types::{SandwichBundle, SandwichConfig};
+
+    pub struct BundleBuilder {
+        config: SandwichConfig,
+        provider: Option<Arc<Provider>>,
+    }
+
+    impl BundleBuilder {
+        pub fn new(config: SandwichConfig) -> Self {
+            Self {
+                config,
+                provider: None,
+            }
+        }
+
+        pub async fn initialize(&mut self, provider: Arc<Provider>) -> Result<()> {
+            self.provider = Some(provider);
+            Ok(())
+        }
+
+        /// 构建完整的 sandwich bundle
+        pub async fn build_sandwich_bundle(
+            &self,
+            opportunity: &SandwichOpportunity,
+            block: &BlockInfo,
+            inventory: &TokenInventory,
+        ) -> Result<SandwichBundle> {
+            info!("🔨 构建 Sandwich Bundle");
+            
+            // 1. 构建前置交易（买入中间代币）
+            let frontrun_tx = self.build_frontrun_transaction(
+                opportunity,
+                block,
+                inventory,
+            ).await?;
+
+            // 2. 获取受害者交易（已经是 RLP 格式）
+            let victim_txs = opportunity.victim_txs
+                .iter()
+                .map(|tx| format!("0x{}", hex::encode(tx.inner.encoded_2718())))
+                .collect();
+
+            // 3. 构建后置交易（卖出中间代币）
+            let backrun_tx = self.build_backrun_transaction(
+                opportunity,
+                block,
+                inventory,
+            ).await?;
+
+            Ok(SandwichBundle {
+                frontrun_tx,
+                victim_txs,
+                backrun_tx,
+                target_block: block.number,
+                expected_revenue: opportunity.estimated_profit,
+                estimated_gas: 300_000, // 估算总 gas
+            })
+        }
+
+        /// 构建前置交易
+        async fn build_frontrun_transaction(
+            &self,
+            opportunity: &SandwichOpportunity,
+            block: &BlockInfo,
+            _inventory: &TokenInventory,
+        ) -> Result<String> {
+            // TODO: 构建实际的前置交易
+            // 1. 计算 gas 价格（略高于受害者交易）
+            // 2. 设置 nonce
+            // 3. 调用 sandwich 合约的相应函数
+            // 4. 签名并编码为 RLP
+
+            debug!("🔨 构建前置交易，输入: {:.4} ETH", 
+                opportunity.optimal_input.to::<u128>() as f64 / 1e18);
+
+            // 暂时返回占位符
+            Ok("0x".to_string())
+        }
+
+        /// 构建后置交易
+        async fn build_backrun_transaction(
+            &self,
+            opportunity: &SandwichOpportunity,
+            block: &BlockInfo,
+            _inventory: &TokenInventory,
+        ) -> Result<String> {
+            // TODO: 构建实际的后置交易
+            // 1. 计算最优的卖出金额
+            // 2. 设置 gas 价格（包含给矿工的贿赂）
+            // 3. 设置 nonce（前置交易 + 1 + 受害者交易数量）
+            // 4. 调用 sandwich 合约的相应函数
+            // 5. 签名并编码为 RLP
+
+            debug!("🔨 构建后置交易，预期收益: {:.4} ETH", 
+                opportunity.estimated_profit.to::<u128>() as f64 / 1e18);
+
+            // 暂时返回占位符
+            Ok("0x".to_string())
+        }
+
+        /// 计算最优的 gas 价格
+        fn calculate_optimal_gas_price(
+            &self,
+            victim_tx_gas_price: U256,
+            base_fee: U256,
+            profit: U256,
+            gas_used: u64,
+        ) -> U256 {
+            // 前置交易：略高于受害者交易
+            let frontrun_gas_price = victim_tx_gas_price + U256::from(1_000_000_000u64); // +1 gwei
+
+            // 后置交易：包含给矿工的贿赂
+            let max_bribe = profit / U256::from(2); // 最多贿赂 50% 利润
+            let bribe_per_gas = max_bribe / U256::from(gas_used);
+            let backrun_gas_price = base_fee + bribe_per_gas;
+
+            frontrun_gas_price.max(backrun_gas_price)
+        }
+    }
+}

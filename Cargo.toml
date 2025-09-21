@@ -5,6 +5,7 @@ members = [
     "crates/artemis-core",
     "crates/generator",
     "crates/strategies/*",
+    "examples/sandwich-bot",
     "crates/clients/*", 
     "examples/*",
 ]
