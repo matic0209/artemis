@@ -49,6 +49,14 @@ pub mod connection_pool;
 pub mod adaptive_tuner;
 /// Performance benchmark suite for optimization validation.
 pub mod benchmarks;
+/// Advanced performance optimizer with multiple optimization strategies.
+pub mod performance_optimizer;
+/// Strategy-specific performance optimizations.
+pub mod strategy_optimizer;
+/// Advanced memory optimization techniques.
+pub mod memory_optimizer;
+/// Advanced network optimization for RPC calls and external services.
+pub mod network_optimizer;
 
 use alloy as _;
 use alloy_mev as _;
