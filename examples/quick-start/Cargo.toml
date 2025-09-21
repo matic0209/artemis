@@ -1,0 +1,20 @@
+[package]
+name = "artemis-quick-start"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+artemis-core = { path = "../../crates/artemis-core" }
+opensea-sudo-arb = { path = "../../crates/strategies/opensea-sudo-arb" }
+opensea-v2 = { path = "../../crates/clients/opensea-v2" }
+alloy-provider = { version = "1.0.27", features = ["ws"] }
+alloy-transport-ws = { version = "1.0.27" }
+tokio = { version = "1.18", features = ["full"] }
+anyhow = "1.0"
+tracing = "0.1.37"
+tracing-subscriber = "0.3.16"
+clap = { version = "4.2.5", features = ["derive"] }
+
+[features]
+default = []
+rbuilder-integration = ["artemis-core/rbuilder-integration"]

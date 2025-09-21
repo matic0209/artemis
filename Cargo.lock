@@ -1031,6 +1031,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "artemis-quick-start"
+version = "0.1.0"
+dependencies = [
+ "alloy-provider",
+ "alloy-transport-ws",
+ "anyhow",
+ "artemis-core",
+ "clap",
+ "opensea-sudo-arb",
+ "opensea-v2",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "async-channel"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -39,8 +39,6 @@ pub mod executors;
 pub mod types;
 /// This module contains utilities for working with Artemis.
 pub mod utilities;
-/// Enhanced engine with optimized event processing.
-pub mod engine_v2;
 /// Intelligent state management with predictive caching.
 pub mod state_manager;
 /// High-performance connection pool for Ethereum providers.
@@ -49,17 +47,17 @@ pub mod connection_pool;
 pub mod adaptive_tuner;
 /// Performance benchmark suite for optimization validation.
 pub mod benchmarks;
-/// Advanced performance optimizer with multiple optimization strategies.
-pub mod performance_optimizer;
-/// Strategy-specific performance optimizations.
-pub mod strategy_optimizer;
-/// Advanced memory optimization techniques.
-pub mod memory_optimizer;
-/// Advanced network optimization for RPC calls and external services.
-pub mod network_optimizer;
 
+// Suppress unused crate warnings
 use alloy as _;
 use alloy_mev as _;
 use alloy_rpc_types as _;
 use alloy_transport_http as _;
 use alloy_transport_ws as _;
+use serde_json as _;
+use reqwest as _;
+use jsonrpsee as _;
+use thiserror as _;
+use tower as _;
+use alloy_network as _;
+use alloy_signer as _;
