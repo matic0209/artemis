@@ -225,7 +225,7 @@ pub mod bundle_builder {
             use artemis_core::eth::TxRequest;
             let tx_request = TxRequest {
                 to: Some(self.config.sandwich_contract.into()),
-                value: Some(opportunity.optimal_input.to::<u128>()),
+                value: Some(opportunity.optimal_input),
                 gas: Some(200_000), // 估算 gas limit
                 gas_price: Some(frontrun_gas_price),
                 input: alloy_primitives::Bytes::from(tx_data).into(),

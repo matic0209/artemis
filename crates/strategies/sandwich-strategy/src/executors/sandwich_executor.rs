@@ -16,7 +16,7 @@ use crate::types::{SandwichBundle, SandwichResult, SandwichStats};
 /// 专门用于 Sandwich 攻击的优化执行器
 pub struct SandwichExecutor {
     /// Flashbots 执行器（备用）
-    flashbots_executor: FlashbotsAlloyExecutor,
+    flashbots_executor: FlashbotsAlloyExecutor<Provider>,
     /// rbuilder 执行器（主要）
     rbuilder_enabled: bool,
     /// 执行统计
@@ -28,7 +28,7 @@ pub struct SandwichExecutor {
 impl SandwichExecutor {
     pub fn new(provider: Arc<Provider>, enable_rbuilder: bool) -> Self {
         // 创建 Flashbots 执行器作为备用
-        let flashbots_endpoints = Endpoints::flashbots();
+        let flashbots_endpoints = Endpoints::default(); // 使用默认端点
         let flashbots_executor = FlashbotsAlloyExecutor::new(
             Arc::clone(&provider),
             flashbots_endpoints,
@@ -100,20 +100,27 @@ impl SandwichExecutor {
         let flashbots_bundle = bundle.clone().into();
         
         // 使用 alloy-mev 执行
-        use alloy_mev::EthMevProviderExt;
+        use alloy_rpc_types_mev::eth_calls::EthSendBundle;
         
-        let bundle_txs = vec![
-            bundle.frontrun_tx.clone(),
-            bundle.victim_txs[0].clone(), // 简化：只处理单个受害者
-            bundle.backrun_tx.clone(),
-        ];
+        let bundle = EthSendBundle {
+            txs: vec![
+                bundle.frontrun_tx.clone(),
+                bundle.victim_txs[0].clone(), // 简化：只处理单个受害者
+                bundle.backrun_tx.clone(),
+            ],
+            block_number: Some(bundle.target_block.to::<u64>()),
+            min_timestamp: None,
+            max_timestamp: None,
+            reverting_tx_hashes: None,
+            replacement_uuid: None,
+        };
         
-        match self.provider.send_bundle(&bundle_txs).await {
+        match MevApi::send_bundle(&*self.provider, bundle).await {
             Ok(bundle_hash) => {
                 info!("✅ Flashbots 提交成功: {:?}", bundle_hash);
                 
                 Ok(SandwichResult {
-                    bundle_hash: artemis_core::eth::Hash::from_slice(&bundle_hash.0),
+                    bundle_hash: artemis_core::eth::Hash::from_slice(bundle_hash.as_slice()),
                     expected_profit: bundle.expected_revenue,
                     actual_profit: None,
                     gas_used: bundle.estimated_gas,

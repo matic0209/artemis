@@ -10,10 +10,7 @@ use artemis_core::{
     types::Strategy,
     state_manager::StateManager,
 };
-use cfmms::{
-    pool::Pool,
-    sync,
-};
+use crate::pools::{Pool, PoolDiscovery};
 use alloy_provider::Provider as ProviderTrait;
 use alloy_consensus::transaction::Transaction as TransactionTrait;
 
@@ -47,12 +44,8 @@ pub struct SandwichStrategy {
 
 /// 池子管理器
 struct PoolManager {
-    /// 所有监控的池子
-    pools: HashMap<Address, Pool>,
-    /// 池子状态缓存
-    pool_states: HashMap<Address, PoolState>,
-    /// 代币对到池子的映射
-    token_pair_to_pool: HashMap<(Address, Address), Address>,
+    /// 池子发现器
+    discovery: PoolDiscovery,
 }
 
 impl SandwichStrategy {
@@ -64,7 +57,7 @@ impl SandwichStrategy {
         Self {
             simulator: SandwichSimulator::new(Arc::clone(&provider)),
             bundle_builder: BundleBuilder::new(config.clone()),
-            pool_manager: PoolManager::new(),
+            pool_manager: PoolManager::new(Arc::clone(&provider)),
             inventory: TokenInventory::new(),
             stats: SandwichStats::default(),
             current_block: BlockInfo::default(),
@@ -217,7 +210,7 @@ impl SandwichStrategy {
             }
             
             // 如果直接调用池子
-            if let Some(pool) = self.pool_manager.pools.get(&to) {
+            if let Some(pool) = self.pool_manager.get_all_pools().get(&to) {
                 return Ok(vec![pool.clone()]);
             }
         }
@@ -260,10 +253,8 @@ impl SandwichStrategy {
                     let token_a = token_addresses[i];
                     let token_b = token_addresses[i + 1];
                     
-                    if let Some(&pool_addr) = self.pool_manager.token_pair_to_pool.get(&(token_a, token_b)) {
-                        if let Some(pool) = self.pool_manager.pools.get(&pool_addr) {
-                            pools.push(pool.clone());
-                        }
+                    if let Some(pool) = self.pool_manager.find_pool_for_tokens(token_a, token_b) {
+                        pools.push(pool.clone());
                     }
                 }
                 
@@ -280,11 +271,7 @@ impl SandwichStrategy {
     }
 
     fn get_pool_tokens(&self, pool: &Pool) -> (Address, Address) {
-        match pool {
-            Pool::UniswapV2(p) => (p.token_a, p.token_b),
-            Pool::UniswapV3(p) => (p.token_a, p.token_b),
-            _ => (Address::ZERO, Address::ZERO),
-        }
+        pool.tokens()
     }
 
     /// 更新池子状态
@@ -321,55 +308,32 @@ impl SandwichStrategy {
 }
 
 impl PoolManager {
-    fn new() -> Self {
+    fn new(provider: Arc<Provider>) -> Self {
         Self {
-            pools: HashMap::new(),
-            pool_states: HashMap::new(),
-            token_pair_to_pool: HashMap::new(),
+            discovery: PoolDiscovery::new(provider),
         }
     }
 
     /// 初始化池子管理器
-    async fn setup(&mut self, provider: Arc<Provider>) -> Result<()> {
+    async fn setup(&mut self) -> Result<()> {
         info!("🏊 初始化池子管理器...");
         
-        // 同步所有 Uniswap V2/V3 池子
-        let pools = sync::sync_pairs(
-            vec![], // DEX 配置
-            provider.clone(),
-            None, // 不使用检查点
-        ).await.map_err(|e| anyhow!("同步池子失败: {:?}", e))?;
+        // 发现 WETH 池子
+        let pools = self.discovery.discover_weth_pools().await?;
         
-        info!("✅ 同步了 {} 个池子", pools.len());
-        
-        // 只保留 WETH 池子
-        let weth_address: Address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".parse().unwrap();
-        
-        for pool in pools {
-            let (token_a, token_b) = match &pool {
-                Pool::UniswapV2(p) => (
-                    Address::from(p.token_a.0), 
-                    Address::from(p.token_b.0)
-                ),
-                Pool::UniswapV3(p) => (
-                    Address::from(p.token_a.0), 
-                    Address::from(p.token_b.0)
-                ),
-                _ => continue,
-            };
-            
-            // 只关注 WETH 池子
-            if token_a == weth_address || token_b == weth_address {
-                let pool_address = Address::from(pool.address().0);
-                self.pools.insert(pool_address, pool);
-                self.token_pair_to_pool.insert((token_a, token_b), pool_address);
-                self.token_pair_to_pool.insert((token_b, token_a), pool_address);
-            }
-        }
-        
-        info!("✅ 筛选出 {} 个 WETH 池子", self.pools.len());
+        info!("✅ 发现了 {} 个 WETH 池子", pools.len());
         
         Ok(())
+    }
+
+    /// 根据代币对查找池子
+    fn find_pool_for_tokens(&self, token_a: Address, token_b: Address) -> Option<&Pool> {
+        self.discovery.find_pool_for_tokens(token_a, token_b)
+    }
+
+    /// 获取所有池子
+    fn get_all_pools(&self) -> &std::collections::HashMap<Address, Pool> {
+        self.discovery.get_all_pools()
     }
 }
 
@@ -379,7 +343,7 @@ impl Strategy<Event, Action> for SandwichStrategy {
         info!("🔄 同步 Sandwich 策略状态...");
         
         // 1. 初始化池子管理器
-        self.pool_manager.setup(Arc::clone(&self.provider)).await?;
+        self.pool_manager.setup().await?;
         
         // 2. 获取当前区块信息
         let block_number = ProviderTrait::get_block_number(&*self.provider).await?;
@@ -392,11 +356,11 @@ impl Strategy<Event, Action> for SandwichStrategy {
         self.inventory.update_weth_balance(weth_balance, block_number);
         
         // 4. 初始化模拟器和构建器
-        self.simulator.initialize(&self.pool_manager.pools).await?;
+        self.simulator.initialize(self.pool_manager.get_all_pools()).await?;
         self.bundle_builder.initialize(Arc::clone(&self.provider)).await?;
         
         info!("✅ Sandwich 策略同步完成");
-        info!("   - 监控池子: {} 个", self.pool_manager.pools.len());
+        info!("   - 监控池子: {} 个", self.pool_manager.get_all_pools().len());
         info!("   - WETH 余额: {:.4} ETH", weth_balance.to::<u128>() as f64 / 1e18);
         info!("   - 当前区块: {}", block_number);
         
@@ -428,22 +392,24 @@ impl SandwichStrategy {
         // 更新当前区块信息
         self.current_block = BlockInfo::from(block);
         
+        let block_num = block.number.to::<u64>();
+        
         // 定期更新池子状态（每10个区块）
-        if block.number.to::<u64>() % 10 == 0 {
+        if block_num % 10 == 0 {
             if let Err(e) = self.update_pool_states().await {
                 warn!("更新池子状态失败: {:?}", e);
             }
         }
         
         // 定期更新代币库存（每5个区块）
-        if block.number.to::<u64>() % 5 == 0 {
+        if block_num % 5 == 0 {
             if let Err(e) = self.update_inventory().await {
                 warn!("更新代币库存失败: {:?}", e);
             }
         }
         
         // 记录统计信息
-        metrics::gauge!("artemis.sandwich.current_block").set(block.number.to::<u64>() as f64);
+        metrics::gauge!("artemis.sandwich.current_block").set(block_num as f64);
         metrics::gauge!("artemis.sandwich.weth_balance")
             .set(self.inventory.get_weth_balance().to::<u128>() as f64 / 1e18);
     }
@@ -470,7 +436,7 @@ impl SandwichStrategy {
 
     /// 获取当前监控的池子数量
     pub fn get_pool_count(&self) -> usize {
-        self.pool_manager.pools.len()
+        self.pool_manager.get_all_pools().len()
     }
 }
 

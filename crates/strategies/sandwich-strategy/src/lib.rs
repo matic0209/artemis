@@ -41,6 +41,9 @@ pub mod simulator;
 /// 工具函数
 pub mod utils;
 
+/// 池子管理（替代 cfmms）
+pub mod pools;
+
 // 重新导出主要类型
 pub use strategy::SandwichStrategy;
 pub use types::{Event, Action, SandwichConfig, SandwichBundle, SandwichOpportunity};
