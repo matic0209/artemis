@@ -19,12 +19,16 @@ alloy-provider = { version = "1.0.27" }
 alloy-rpc-types-eth = { version = "1.0.27" }
 alloy-sol-types = { version = "1.0.27" }
 alloy-contract = { version = "1.0.27" }
+alloy-mev = { version = "1.0.0" }
+tokio-stream = { version = "0.1", features = ["sync"] }
+metrics = "0.22"
 
 # DeFi utilities
 cfmms = { git = "https://github.com/0xKitsune/cfmms-rs" }
 revm = { version = "29.0.0", features = ["std", "secp256k1"] }
 once_cell = "1.19"
 hex = "0.4"
+reqwest = { version = "0.11", features = ["json"] }
 
 # Performance optimization
 rayon = "1.8"

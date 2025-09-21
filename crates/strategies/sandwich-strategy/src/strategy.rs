@@ -6,22 +6,22 @@ use tracing::{debug, info, warn, error};
 use rayon::prelude::*;
 
 use artemis_core::{
-    eth::{Address, Provider, U256, Hash},
+    eth::{Address, Provider, U256},
     types::Strategy,
     state_manager::StateManager,
 };
 use cfmms::{
-    pool::{Pool, PoolVariant},
+    pool::Pool,
     sync,
 };
 use alloy_provider::Provider as ProviderTrait;
+use alloy_consensus::transaction::Transaction as TransactionTrait;
 
 use crate::types::{
     Event, Action, SandwichConfig, SandwichOpportunity, SandwichBundle, 
     BlockInfo, TokenInventory, SandwichStats, PoolState,
 };
-use crate::simulator::SandwichSimulator;
-use crate::bundle_builder::BundleBuilder;
+use crate::simulator::{SandwichSimulator, bundle_builder::BundleBuilder};
 
 /// 高性能 Sandwich 攻击策略
 pub struct SandwichStrategy {
@@ -188,7 +188,7 @@ impl SandwichStrategy {
     /// 快速预检查交易是否值得进一步处理
     fn quick_precheck(&self, tx: &artemis_core::eth::Transaction) -> bool {
         // 检查 gas 价格是否合理
-        if let Some(max_fee) = tx.inner.max_fee_per_gas() {
+        if let Some(max_fee) = TransactionTrait::max_fee_per_gas(&tx.inner) {
             if max_fee > self.config.max_gas_price.to::<u128>() {
                 return false;
             }
@@ -196,7 +196,7 @@ impl SandwichStrategy {
 
         // 检查是否能在下一个区块执行
         let next_block_base_fee = self.current_block.next_block().base_fee_per_gas;
-        if let Some(max_fee) = tx.inner.max_fee_per_gas() {
+        if let Some(max_fee) = TransactionTrait::max_fee_per_gas(&tx.inner) {
             if U256::from(max_fee) < next_block_base_fee {
                 return false;
             }
@@ -210,7 +210,7 @@ impl SandwichStrategy {
         // 这里需要解析交易的 calldata 来确定涉及的池子
         // 简化实现：基于 to 地址查找相关池子
         
-        if let Some(to) = tx.inner.to() {
+        if let Some(to) = TransactionTrait::to(&tx.inner) {
             // 如果是路由器调用，需要解析 calldata
             if self.is_router_address(&to) {
                 return self.parse_router_call(tx).await;
@@ -227,17 +227,50 @@ impl SandwichStrategy {
 
     fn is_router_address(&self, address: &Address) -> bool {
         // 检查是否是已知的 DEX 路由器
-        match address {
-            addr if *addr == "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D".parse().unwrap() => true, // Uniswap V2
-            addr if *addr == "0xE592427A0AEce92De3Edee1F18E0157C05861564".parse().unwrap() => true, // Uniswap V3
-            addr if *addr == "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F".parse().unwrap() => true, // Sushiswap
-            _ => false,
-        }
+        let uniswap_v2: Address = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D".parse().unwrap();
+        let uniswap_v3: Address = "0xE592427A0AEce92De3Edee1F18E0157C05861564".parse().unwrap();
+        let sushiswap: Address = "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F".parse().unwrap();
+        
+        *address == uniswap_v2 || *address == uniswap_v3 || *address == sushiswap
     }
 
     async fn parse_router_call(&self, tx: &artemis_core::eth::Transaction) -> Result<Vec<Pool>> {
-        // TODO: 实现路由器调用解析
-        // 这里需要根据不同的路由器和函数选择器解析参数
+        // 实现路由器调用解析
+        if let Some(input) = TransactionTrait::input(&tx.inner) {
+            if input.len() >= 4 {
+                let selector = &input[0..4];
+                let params = &input[4..];
+                
+                // 根据函数选择器解析参数
+                let token_addresses = match selector {
+                    // swapExactTokensForTokens 等函数
+                    [0x38, 0xed, 0x17, 0x39] | [0x88, 0x03, 0xdb, 0xee] | [0x18, 0xcb, 0xaf, 0xe5] => {
+                        crate::utils::extract_tokens_from_calldata(input)
+                    }
+                    // swapExactETHForTokens 等 ETH 相关函数
+                    [0x7f, 0xf3, 0x6a, 0xb5] | [0xfb, 0x3b, 0xdb, 0x41] | [0x47, 0x51, 0xb7, 0xb1] => {
+                        crate::utils::extract_tokens_from_calldata(input)
+                    }
+                    _ => vec![],
+                };
+                
+                // 根据代币地址查找对应的池子
+                let mut pools = Vec::new();
+                for i in 0..token_addresses.len().saturating_sub(1) {
+                    let token_a = token_addresses[i];
+                    let token_b = token_addresses[i + 1];
+                    
+                    if let Some(&pool_addr) = self.pool_manager.token_pair_to_pool.get(&(token_a, token_b)) {
+                        if let Some(pool) = self.pool_manager.pools.get(&pool_addr) {
+                            pools.push(pool.clone());
+                        }
+                    }
+                }
+                
+                return Ok(pools);
+            }
+        }
+        
         Ok(vec![])
     }
 
@@ -301,10 +334,10 @@ impl PoolManager {
         info!("🏊 初始化池子管理器...");
         
         // 同步所有 Uniswap V2/V3 池子
-        let pools = sync::sync_pools(
-            vec![], // 工厂地址
-            Arc::new(provider.clone()),
-            Some(18000000), // 从区块 18M 开始同步
+        let pools = sync::sync_pairs(
+            vec![], // DEX 配置
+            provider.clone(),
+            None, // 不使用检查点
         ).await.map_err(|e| anyhow!("同步池子失败: {:?}", e))?;
         
         info!("✅ 同步了 {} 个池子", pools.len());
@@ -314,14 +347,20 @@ impl PoolManager {
         
         for pool in pools {
             let (token_a, token_b) = match &pool {
-                Pool::UniswapV2(p) => (p.token_a, p.token_b),
-                Pool::UniswapV3(p) => (p.token_a, p.token_b),
+                Pool::UniswapV2(p) => (
+                    Address::from(p.token_a.0), 
+                    Address::from(p.token_b.0)
+                ),
+                Pool::UniswapV3(p) => (
+                    Address::from(p.token_a.0), 
+                    Address::from(p.token_b.0)
+                ),
                 _ => continue,
             };
             
             // 只关注 WETH 池子
             if token_a == weth_address || token_b == weth_address {
-                let pool_address = pool.address();
+                let pool_address = Address::from(pool.address().0);
                 self.pools.insert(pool_address, pool);
                 self.token_pair_to_pool.insert((token_a, token_b), pool_address);
                 self.token_pair_to_pool.insert((token_b, token_a), pool_address);
@@ -409,31 +448,6 @@ impl SandwichStrategy {
             .set(self.inventory.get_weth_balance().to::<u128>() as f64 / 1e18);
     }
 
-    /// 更新池子状态
-    async fn update_pool_states(&mut self) -> Result<()> {
-        let start = std::time::Instant::now();
-        
-        // 并行更新所有池子状态
-        let pool_addresses: Vec<_> = self.pool_manager.pools.keys().copied().collect();
-        
-        // 使用状态管理器批量获取状态
-        let balances = self.state_manager
-            .get_balances_optimized(&pool_addresses)
-            .await?;
-        
-        // 更新缓存
-        for (address, balance) in pool_addresses.iter().zip(balances.iter()) {
-            // TODO: 更新具体的池子状态
-        }
-        
-        let elapsed = start.elapsed();
-        debug!("池子状态更新完成，耗时: {:.2}ms", elapsed.as_millis());
-        
-        metrics::histogram!("artemis.sandwich.pool_update_duration")
-            .record(elapsed.as_millis() as f64);
-        
-        Ok(())
-    }
 
     /// 更新代币库存
     async fn update_inventory(&mut self) -> Result<()> {

@@ -4,6 +4,8 @@ use tracing::{debug, info};
 
 use artemis_core::eth::{Provider, Address, U256};
 use crate::types::{SandwichOpportunity, BlockInfo, TokenInventory};
+use alloy_consensus::transaction::Transaction as TransactionTrait;
+use alloy_eips::eip2718::Encodable2718;
 
 /// 高性能 Sandwich 模拟器
 pub struct SandwichSimulator {
@@ -53,7 +55,7 @@ impl SandwichSimulator {
         // 基于交易价值和池子流动性的快速估算
         let victim_value = opportunity.victim_txs
             .iter()
-            .filter_map(|tx| tx.inner.value())
+            .filter_map(|tx| TransactionTrait::value(&tx.inner))
             .sum::<u128>();
 
         // 估算滑点影响
@@ -75,7 +77,7 @@ impl SandwichSimulator {
         // 基于受害者交易价值计算最优输入
         let victim_value = opportunity.victim_txs
             .iter()
-            .filter_map(|tx| tx.inner.value())
+            .filter_map(|tx| TransactionTrait::value(&tx.inner))
             .sum::<u128>();
 
         // 最优输入通常是受害者交易价值的 2-5 倍
@@ -172,7 +174,7 @@ pub mod bundle_builder {
             // 2. 获取受害者交易（已经是 RLP 格式）
             let victim_txs = opportunity.victim_txs
                 .iter()
-                .map(|tx| format!("0x{}", hex::encode(tx.inner.encoded_2718())))
+                .map(|tx| format!("0x{}", hex::encode(Encodable2718::encoded_2718(&tx.inner))))
                 .collect();
 
             // 3. 构建后置交易（卖出中间代币）
@@ -199,17 +201,70 @@ pub mod bundle_builder {
             block: &BlockInfo,
             _inventory: &TokenInventory,
         ) -> Result<String> {
-            // TODO: 构建实际的前置交易
-            // 1. 计算 gas 价格（略高于受害者交易）
-            // 2. 设置 nonce
-            // 3. 调用 sandwich 合约的相应函数
-            // 4. 签名并编码为 RLP
-
+            // 构建实际的前置交易
             debug!("🔨 构建前置交易，输入: {:.4} ETH", 
                 opportunity.optimal_input.to::<u128>() as f64 / 1e18);
 
-            // 暂时返回占位符
-            Ok("0x".to_string())
+            // 1. 计算 gas 价格（略高于受害者交易以确保优先执行）
+            let victim_gas_price = opportunity.victim_txs
+                .iter()
+                .filter_map(|tx| TransactionTrait::max_fee_per_gas(&tx.inner))
+                .max()
+                .unwrap_or(block.base_fee_per_gas.to::<u128>());
+            
+            let frontrun_gas_price = victim_gas_price + 1_000_000_000; // +1 gwei
+            
+            // 2. 构建交易数据（调用 sandwich 合约）
+            let tx_data = self.build_sandwich_call_data(
+                opportunity.intermediary_token,
+                opportunity.optimal_input,
+                true, // is_frontrun
+            );
+            
+            // 3. 创建交易请求
+            use artemis_core::eth::TxRequest;
+            let tx_request = TxRequest {
+                to: Some(self.config.sandwich_contract.into()),
+                value: Some(opportunity.optimal_input.to::<u128>()),
+                gas: Some(200_000), // 估算 gas limit
+                gas_price: Some(frontrun_gas_price),
+                input: alloy_primitives::Bytes::from(tx_data).into(),
+                nonce: None, // 由 Provider 自动填充
+                ..Default::default()
+            };
+            
+            // 4. 签名并编码（简化实现）
+            // 实际应该使用钱包签名
+            Ok(format!("0x{}", hex::encode(serde_json::to_vec(&tx_request)?)))
+        }
+
+        fn build_sandwich_call_data(
+            &self,
+            intermediary_token: Address,
+            amount_in: U256,
+            is_frontrun: bool,
+        ) -> Vec<u8> {
+            // 构建 sandwich 合约调用数据
+            // 这里应该根据池子类型（V2/V3）构建不同的调用
+            
+            if is_frontrun {
+                // 前置交易：买入中间代币
+                // sandwichV2(address target_pool, address intermediary_token, uint256 amount_in, uint256 amount_out_min, bool is_weth_input)
+                let mut call_data = Vec::new();
+                call_data.extend_from_slice(&[0x12, 0x34, 0x56, 0x78]); // 函数选择器（示例）
+                call_data.extend_from_slice(&[0u8; 12]); // padding
+                call_data.extend_from_slice(intermediary_token.as_slice());
+                call_data.extend_from_slice(&amount_in.to_be_bytes::<32>());
+                call_data
+            } else {
+                // 后置交易：卖出中间代币
+                let mut call_data = Vec::new();
+                call_data.extend_from_slice(&[0x87, 0x65, 0x43, 0x21]); // 函数选择器（示例）
+                call_data.extend_from_slice(&[0u8; 12]); // padding
+                call_data.extend_from_slice(intermediary_token.as_slice());
+                call_data.extend_from_slice(&amount_in.to_be_bytes::<32>());
+                call_data
+            }
         }
 
         /// 构建后置交易

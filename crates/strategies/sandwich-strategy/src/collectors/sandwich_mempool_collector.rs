@@ -8,9 +8,11 @@ use tokio_stream::StreamExt;
 use tracing::{debug, info};
 
 use artemis_core::{
-    eth::{Transaction, Provider, Address},
+    eth::{Transaction, Provider, Address, U256},
     types::{Collector, CollectorStream},
 };
+use alloy_provider::Provider as ProviderTrait;
+use alloy_consensus::transaction::Transaction as TransactionTrait;
 
 /// 专门用于 Sandwich 策略的内存池收集器
 /// 只收集可能可以被 sandwich 的交易
@@ -154,28 +156,28 @@ impl Collector<Transaction> for SandwichMempoolCollector {
         tokio::spawn(async move {
             info!("🎯 启动 Sandwich 内存池收集器");
             
-            if let Ok(stream) = provider.subscribe_pending_transactions().await {
+            if let Ok(stream) = ProviderTrait::subscribe_pending_transactions(&*provider).await {
                 let mut stream = stream.into_stream();
                 let mut processed_count = 0;
                 let mut filtered_count = 0;
                 
                 while let Some(tx_hash) = stream.next().await {
                     // 获取完整交易详情
-                    if let Ok(Some(txn)) = provider.get_transaction_by_hash(tx_hash).await {
+                    if let Ok(Some(txn)) = ProviderTrait::get_transaction_by_hash(&*provider, tx_hash).await {
                         processed_count += 1;
                         
                         // 快速预过滤
                         let is_potential_target = {
                             // 检查交易价值
-                            let value_ok = txn.inner.value()
-                                .map_or(false, |value| *value >= min_value_wei);
+                            let value_ok = TransactionTrait::value(&txn.inner)
+                                .map_or(false, |value| value >= min_value_wei);
                             
                             // 检查是否与目标路由器交互
-                            let router_ok = txn.inner.to()
+                            let router_ok = TransactionTrait::to(&txn.inner)
                                 .map_or(false, |to| target_routers.contains(&to));
                             
                             // 检查是否有足够的 gas（避免失败的交易）
-                            let gas_ok = txn.inner.gas_limit() > 100_000;
+                            let gas_ok = TransactionTrait::gas_limit(&txn.inner) > 100_000;
                             
                             value_ok && router_ok && gas_ok
                         };

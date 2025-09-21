@@ -9,6 +9,7 @@ use artemis_core::{
     executors::flashbots_alloy_executor::FlashbotsAlloyExecutor,
 };
 use alloy_mev::{EthMevProviderExt, Endpoints};
+use alloy_provider::ext::MevApi;
 
 use crate::types::{SandwichBundle, SandwichResult, SandwichStats};
 
@@ -157,32 +158,53 @@ impl SandwichExecutor {
 
     /// 提交到 rbuilder
     async fn submit_to_rbuilder(&self, bundle: &SandwichBundle) -> Result<artemis_core::eth::Hash> {
-        // TODO: 实现 rbuilder JSON-RPC 调用
-        // 使用 eth_sendBundle 方法
+        // 实现 rbuilder JSON-RPC 调用
+        let mut bundle_txs = vec![bundle.frontrun_tx.clone()];
+        bundle_txs.extend(bundle.victim_txs.clone());
+        bundle_txs.push(bundle.backrun_tx.clone());
         
         let payload = serde_json::json!({
             "jsonrpc": "2.0",
             "method": "eth_sendBundle",
             "params": [{
-                "txs": [
-                    bundle.frontrun_tx,
-                    bundle.victim_txs[0], // 简化处理
-                    bundle.backrun_tx
-                ],
+                "txs": bundle_txs,
                 "blockNumber": format!("0x{:x}", bundle.target_block.to::<u64>()),
+                "minTimestamp": null,
+                "maxTimestamp": null,
             }],
             "id": 1
         });
 
-        // TODO: 发送 HTTP 请求到 rbuilder
-        // let response = reqwest::Client::new()
-        //     .post("http://localhost:8645")
-        //     .json(&payload)
-        //     .send()
-        //     .await?;
+        // 发送 HTTP 请求到 rbuilder
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://localhost:8645")
+            .header("Content-Type", "application/json")
+            .json(&payload)
+            .send()
+            .await?;
 
-        // 暂时返回模拟的哈希
-        Ok(artemis_core::eth::Hash::random())
+        if !response.status().is_success() {
+            return Err(anyhow!("rbuilder 请求失败: {}", response.status()));
+        }
+
+        let result: serde_json::Value = response.json().await?;
+        
+        if let Some(error) = result.get("error") {
+            return Err(anyhow!("rbuilder 错误: {}", error));
+        }
+
+        // 解析 bundle hash
+        let bundle_hash_str = result["result"]
+            .as_str()
+            .ok_or_else(|| anyhow!("无效的 rbuilder 响应"))?;
+            
+        let bundle_hash = bundle_hash_str
+            .strip_prefix("0x")
+            .unwrap_or(bundle_hash_str)
+            .parse::<artemis_core::eth::Hash>()?;
+
+        Ok(bundle_hash)
     }
 
     /// 获取执行统计

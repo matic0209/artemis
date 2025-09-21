@@ -28,15 +28,77 @@ pub fn extract_tokens_from_calldata(calldata: &[u8]) -> Vec<Address> {
 
 /// 从 swap 参数中提取代币路径
 fn extract_path_from_swap_params(params: &[u8]) -> Vec<Address> {
-    // TODO: 实现 ABI 解码
-    // 这里需要解码 address[] path 参数
-    vec![]
+    // 实现基础的 ABI 解码
+    if params.len() < 32 * 3 { // 至少需要 amountIn, amountOutMin, path offset
+        return vec![];
+    }
+    
+    // 跳过 amountIn (32 bytes) 和 amountOutMin (32 bytes)
+    // path 数组的偏移量在第 3 个位置
+    let path_offset = u32::from_be_bytes([
+        params[64], params[65], params[66], params[67]
+    ]) as usize;
+    
+    if path_offset + 32 > params.len() {
+        return vec![];
+    }
+    
+    // 读取数组长度
+    let array_length = u32::from_be_bytes([
+        params[path_offset], 
+        params[path_offset + 1], 
+        params[path_offset + 2], 
+        params[path_offset + 3]
+    ]) as usize;
+    
+    // 提取地址
+    let mut addresses = Vec::new();
+    for i in 0..array_length {
+        let addr_offset = path_offset + 32 + (i * 32) + 12; // 地址在 32 字节的后 20 字节
+        if addr_offset + 20 <= params.len() {
+            let addr_bytes: [u8; 20] = params[addr_offset..addr_offset + 20].try_into().unwrap();
+            addresses.push(Address::from(addr_bytes));
+        }
+    }
+    
+    addresses
 }
 
 /// 从 ETH swap 参数中提取代币路径
 fn extract_path_from_eth_swap_params(params: &[u8]) -> Vec<Address> {
-    // TODO: 实现 ABI 解码
-    vec![]
+    // ETH swap 的参数结构略有不同，但解码逻辑类似
+    if params.len() < 32 * 2 { // amountOutMin, path offset
+        return vec![];
+    }
+    
+    // path 数组的偏移量在第 2 个位置
+    let path_offset = u32::from_be_bytes([
+        params[32], params[33], params[34], params[35]
+    ]) as usize;
+    
+    if path_offset + 32 > params.len() {
+        return vec![];
+    }
+    
+    // 读取数组长度
+    let array_length = u32::from_be_bytes([
+        params[path_offset], 
+        params[path_offset + 1], 
+        params[path_offset + 2], 
+        params[path_offset + 3]
+    ]) as usize;
+    
+    // 提取地址
+    let mut addresses = Vec::new();
+    for i in 0..array_length {
+        let addr_offset = path_offset + 32 + (i * 32) + 12;
+        if addr_offset + 20 <= params.len() {
+            let addr_bytes: [u8; 20] = params[addr_offset..addr_offset + 20].try_into().unwrap();
+            addresses.push(Address::from(addr_bytes));
+        }
+    }
+    
+    addresses
 }
 
 /// 计算 Uniswap V2 的输出金额
