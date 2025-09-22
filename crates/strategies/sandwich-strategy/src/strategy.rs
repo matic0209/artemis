@@ -18,7 +18,7 @@ use crate::types::{
     Event, Action, SandwichConfig, SandwichOpportunity, SandwichBundle, 
     BlockInfo, TokenInventory, SandwichStats, PoolState,
 };
-use crate::simulator::{SandwichSimulator, bundle_builder::BundleBuilder};
+use crate::simulator::SandwichSimulator;
 
 /// 高性能 Sandwich 攻击策略
 pub struct SandwichStrategy {
@@ -35,7 +35,7 @@ pub struct SandwichStrategy {
     /// Sandwich 模拟器
     simulator: SandwichSimulator,
     /// Bundle 构建器
-    bundle_builder: BundleBuilder,
+    bundle_builder: bundle_builder::BundleBuilder,
     /// 性能统计
     stats: SandwichStats,
     /// 当前区块信息
@@ -55,10 +55,10 @@ impl SandwichStrategy {
         state_manager: Arc<StateManager>,
     ) -> Self {
         Self {
-            simulator: SandwichSimulator::new(Arc::clone(&provider)),
-            bundle_builder: BundleBuilder::new(config.clone()),
+            simulator: SandwichSimulator::new(Arc::clone(&provider), config.clone()),
+            bundle_builder: bundle_builder::BundleBuilder::new(config.clone()),
             pool_manager: PoolManager::new(Arc::clone(&provider)),
-            inventory: TokenInventory::new(),
+            inventory: TokenInventory::new(config.searcher_address),
             stats: SandwichStats::default(),
             current_block: BlockInfo::default(),
             provider,
@@ -126,17 +126,40 @@ impl SandwichStrategy {
         let mut max_profit = U256::ZERO;
 
         for mut opportunity in opportunities {
-            match self.simulator.simulate_sandwich(&opportunity, &self.current_block).await {
-                Ok((profit, optimal_input)) => {
-                    if profit > max_profit && profit >= self.config.min_profit_threshold {
-                        opportunity.estimated_profit = profit;
-                        opportunity.optimal_input = optimal_input;
-                        best_opportunity = Some(opportunity);
-                        max_profit = profit;
+            // 首先进行快速盈利性检查
+            match self.simulator.quick_profitability_check(&opportunity, &self.current_block).await {
+                Ok(is_potentially_profitable) => {
+                    if !is_potentially_profitable {
+                        debug!("机会快速检查不盈利，跳过详细模拟");
+                        continue;
                     }
                 }
                 Err(e) => {
-                    debug!("Sandwich 模拟失败: {:?}", e);
+                    debug!("快速盈利性检查失败: {:?}", e);
+                    continue;
+                }
+            }
+
+            // 进行详细的 REVM 模拟
+            match self.simulator.simulate_detailed(&opportunity, &self.current_block, &self.inventory).await {
+                Ok(simulation_result) => {
+                    if simulation_result.success && 
+                       simulation_result.net_profit > max_profit && 
+                       simulation_result.net_profit >= self.config.min_profit_threshold {
+                        
+                        opportunity.estimated_profit = simulation_result.net_profit;
+                        opportunity.optimal_input = U256::from(1000000000000000000u64); // 1 ETH 默认，后续优化
+                        best_opportunity = Some(opportunity);
+                        max_profit = simulation_result.net_profit;
+                        
+                        info!("🧪 REVM 模拟成功 - 净利润: {:.6} ETH, Gas: {}, ROI: {:.2}%",
+                              simulation_result.net_profit.as_u128() as f64 / 1e18,
+                              simulation_result.total_gas,
+                              simulation_result.calculate_roi(U256::from(1000000000000000000u64)));
+                    }
+                }
+                Err(e) => {
+                    debug!("REVM 模拟失败: {:?}", e);
                 }
             }
         }
@@ -394,6 +417,13 @@ impl SandwichStrategy {
         
         let block_num = block.number.to::<u64>();
         
+        // 初始化或更新 REVM 模拟器（每个新区块）
+        if let Err(e) = self.simulator.initialize(&self.current_block).await {
+            warn!("初始化 REVM 模拟器失败: {:?}", e);
+        } else {
+            debug!("🧪 REVM 模拟器已为区块 {} 初始化", block_num);
+        }
+        
         // 定期更新池子状态（每10个区块）
         if block_num % 10 == 0 {
             if let Err(e) = self.update_pool_states().await {
@@ -412,6 +442,7 @@ impl SandwichStrategy {
         metrics::gauge!("artemis.sandwich.current_block").set(block_num as f64);
         metrics::gauge!("artemis.sandwich.weth_balance")
             .set(self.inventory.get_weth_balance().to::<u128>() as f64 / 1e18);
+        metrics::gauge!("artemis.sandwich.revm_initialized").set(1.0);
     }
 
 
@@ -440,47 +471,8 @@ impl SandwichStrategy {
     }
 }
 
-/// Sandwich 模拟器
-mod simulator {
-    use super::*;
-    
-    pub struct SandwichSimulator {
-        provider: Arc<Provider>,
-        // TODO: 添加 revm 模拟器
-    }
-    
-    impl SandwichSimulator {
-        pub fn new(provider: Arc<Provider>) -> Self {
-            Self { provider }
-        }
-        
-        pub async fn initialize(&mut self, pools: &HashMap<Address, Pool>) -> Result<()> {
-            info!("🧪 初始化 Sandwich 模拟器");
-            // TODO: 设置 revm 环境
-            Ok(())
-        }
-        
-        /// 模拟 sandwich 攻击，返回利润和最优输入
-        pub async fn simulate_sandwich(
-            &self,
-            opportunity: &SandwichOpportunity,
-            block: &BlockInfo,
-        ) -> Result<(U256, U256)> {
-            // TODO: 实现 revm 模拟
-            // 1. 设置区块环境
-            // 2. 模拟前置交易
-            // 3. 模拟受害者交易
-            // 4. 模拟后置交易
-            // 5. 计算净利润
-            
-            // 暂时返回模拟结果
-            let estimated_profit = U256::from(1_000_000_000_000_000u64); // 0.001 ETH
-            let optimal_input = U256::from(10_000_000_000_000_000_000u64); // 10 ETH
-            
-            Ok((estimated_profit, optimal_input))
-        }
-    }
-}
+// 注意：Sandwich 模拟器现在从 simulator.rs 模块导入，
+// 该模块包含完整的 REVM 集成实现
 
 /// Bundle 构建器
 mod bundle_builder {
