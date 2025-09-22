@@ -17,6 +17,7 @@ use artemis_core::{
 
 use crate::types::{Action, Event, V2V3PoolRecord};
 use crate::alloy_impl::{MevShareUniArb as AlloyMevShareUniArb, V2PoolInfo};
+use crate::price_oracle::{CurrentPrices, PredictedPrices};
 
 /// 完整的 MEV-Share Uni Arbitrage 策略实现
 pub struct MevShareUniArb<P> {
@@ -317,14 +318,10 @@ where
 
     /// 获取当前市场价格
     async fn get_current_prices(&self, v3_address: Address, v2_address: Address) -> Result<CurrentPrices> {
-        // TODO: 实现真实的价格获取逻辑
-        // 这里应该从链上获取当前价格
-        Ok(CurrentPrices {
-            v3_price: U256::from(1000),
-            v2_price: U256::from(1005),
-            v3_liquidity: U256::from(1000000),
-            v2_liquidity: U256::from(500000),
-        })
+        // 使用价格预言机获取真实价格
+        let mut oracle = crate::price_oracle::PriceOracle::new(self.alloy_impl.provider.clone());
+        oracle.get_current_prices(v3_address, v2_address).await
+            .with_context(|| "Failed to get current prices from oracle")
     }
 
     /// 计算最优套利金额
@@ -334,20 +331,56 @@ where
         predicted_prices: &PredictedPrices,
         risk_assessment: &RiskMetrics,
     ) -> Result<Vec<OptimalAmount>> {
-        // TODO: 实现动态金额优化算法
+        // 动态金额优化算法
         // 基于价格差异、流动性、风险评估等计算最优金额
-        Ok(vec![
-            OptimalAmount {
-                amount: U256::from(1000000),
-                expected_profit: U256::from(5000),
-                confidence: 0.8,
-            },
-            OptimalAmount {
-                amount: U256::from(5000000),
-                expected_profit: U256::from(20000),
-                confidence: 0.7,
-            },
-        ])
+        
+        let price_impact = current_prices.price_impact;
+        let min_liquidity = current_prices.v3_liquidity.min(current_prices.v2_liquidity);
+        
+        let mut optimal_amounts = Vec::new();
+        
+        // 基础金额计算
+        let base_amounts = vec![
+            U256::from(100000000000000000u64),    // 0.1 ETH
+            U256::from(500000000000000000u64),    // 0.5 ETH  
+            U256::from(1000000000000000000u64),   // 1 ETH
+            U256::from(2000000000000000000u64),   // 2 ETH
+            U256::from(5000000000000000000u64),   // 5 ETH
+        ];
+        
+        for amount in base_amounts {
+            // 根据流动性限制金额
+            let max_safe_amount = min_liquidity / U256::from(10); // 最多使用 10% 流动性
+            let adjusted_amount = amount.min(max_safe_amount);
+            
+            // 计算预期利润
+            let price_diff = if current_prices.v2_price > current_prices.v3_price {
+                current_prices.v2_price - current_prices.v3_price
+            } else {
+                current_prices.v3_price - current_prices.v2_price
+            };
+            
+            let expected_profit = (adjusted_amount * price_diff) / current_prices.v3_price;
+            
+            // 根据风险调整置信度
+            let base_confidence = predicted_prices.confidence;
+            let risk_penalty = risk_assessment.overall_risk_score / 100.0;
+            let confidence = (base_confidence * (1.0 - risk_penalty)).max(0.1);
+            
+            // 只有预期利润为正才添加
+            if !expected_profit.is_zero() {
+                optimal_amounts.push(OptimalAmount {
+                    amount: adjusted_amount,
+                    expected_profit,
+                    confidence,
+                });
+            }
+        }
+        
+        // 按预期利润排序
+        optimal_amounts.sort_by(|a, b| b.expected_profit.cmp(&a.expected_profit));
+        
+        Ok(optimal_amounts)
     }
 
     /// 获取默认金额
@@ -437,23 +470,64 @@ where
         // 指数移动平均
         self.stats.avg_processing_time_ms = (current_avg * 0.9) + (new_time * 0.1);
     }
+
+    /// 估算 Gas 成本
+    async fn estimate_gas_cost(&self) -> Result<U256> {
+        // 套利交易的典型 gas 使用量
+        let gas_limit = U256::from(400000);
+        
+        // 获取当前 gas 价格 (简化实现，实际应该从网络获取)
+        let gas_price = U256::from(20000000000u64); // 20 gwei
+        
+        Ok(gas_limit * gas_price)
+    }
+
+    /// 估算滑点成本
+    async fn estimate_slippage_cost(&self, amount: U256, prices: &CurrentPrices) -> Result<U256> {
+        // 基于流动性和交易金额估算滑点
+        let min_liquidity = prices.v3_liquidity.min(prices.v2_liquidity);
+        
+        if min_liquidity.is_zero() {
+            return Ok(U256::zero());
+        }
+        
+        // 滑点率 = 交易金额 / 流动性 * 影响因子
+        let impact_ratio = amount * U256::from(10000) / min_liquidity; // 基点
+        let slippage_rate = impact_ratio.min(U256::from(500)); // 最大 5% 滑点
+        
+        Ok(amount * slippage_rate / U256::from(10000))
+    }
+
+    /// 估算滑点
+    async fn estimate_slippage(&self, amount: U256, prices: &CurrentPrices) -> Result<f64> {
+        let min_liquidity = prices.v3_liquidity.min(prices.v2_liquidity);
+        
+        if min_liquidity.is_zero() {
+            return Ok(0.05); // 默认 5% 滑点
+        }
+        
+        let amount_f64 = amount.as_u128() as f64;
+        let liquidity_f64 = min_liquidity.as_u128() as f64;
+        
+        // 简化的滑点模型
+        let impact_ratio = amount_f64 / liquidity_f64;
+        let slippage = impact_ratio * 2.0; // 简化因子
+        
+        Ok(slippage.min(0.1)) // 最大 10% 滑点
+    }
+
+    /// 获取历史成功率
+    async fn get_historical_success_rate(&self) -> Option<f64> {
+        let total_attempts = self.stats.successful_arbs + self.stats.failed_arbs;
+        if total_attempts > 0 {
+            Some(self.stats.successful_arbs as f64 / total_attempts as f64)
+        } else {
+            None
+        }
+    }
 }
 
-// 辅助类型定义
-#[derive(Debug, Clone)]
-struct CurrentPrices {
-    v3_price: U256,
-    v2_price: U256,
-    v3_liquidity: U256,
-    v2_liquidity: U256,
-}
-
-#[derive(Debug, Clone)]
-struct PredictedPrices {
-    v3_price: U256,
-    v2_price: U256,
-    confidence: f64,
-}
+// 注意：CurrentPrices 和 PredictedPrices 现在从 price_oracle 模块导入
 
 #[derive(Debug, Clone)]
 struct OptimalAmount {

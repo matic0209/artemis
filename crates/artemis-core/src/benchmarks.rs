@@ -33,8 +33,8 @@ impl PerformanceBenchmark {
 
     /// Run comprehensive performance comparison
     pub async fn run_comparison(&self) -> Result<BenchmarkResults> {
-        println!("🚀 Starting Artemis Performance Benchmark");
-        println!("Iterations: {}", self.iterations);
+        tracing::info!("🚀 Starting Artemis Performance Benchmark");
+        tracing::info!("Iterations: {}", self.iterations);
         
         // Benchmark baseline performance
         let (v1_latency, v1_throughput, v1_memory) = self.benchmark_baseline().await?;
@@ -60,7 +60,7 @@ impl PerformanceBenchmark {
     }
 
     async fn benchmark_baseline(&self) -> Result<(Duration, f64, usize)> {
-        println!("📊 测试基线性能...");
+        tracing::info!("📊 测试基线性能...");
         
         let start = Instant::now();
         let mut total_events = 0;
@@ -83,13 +83,13 @@ impl PerformanceBenchmark {
         let throughput = total_events as f64 / elapsed.as_secs_f64();
         let memory_usage = self.estimate_memory_usage();
         
-        println!("✅ 基线性能: {:.2}ms, {:.1} events/s", elapsed.as_millis(), throughput);
+        tracing::info!("✅ 基线性能: {:.2}ms, {:.1} events/s", elapsed.as_millis(), throughput);
         
         Ok((elapsed, throughput, memory_usage))
     }
 
     async fn benchmark_optimized(&self) -> Result<(Duration, f64, usize)> {
-        println!("🔥 测试优化性能...");
+        tracing::info!("🔥 测试优化性能...");
         
         let start = Instant::now();
         let mut total_events = 0;

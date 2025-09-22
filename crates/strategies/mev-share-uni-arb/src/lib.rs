@@ -15,6 +15,9 @@ pub mod types;
 /// Configuration management for the strategy.
 pub mod config;
 
+/// Price oracle for real market data.
+pub mod price_oracle;
+
 /// Strategy tests.
 #[cfg(test)]
 mod tests;

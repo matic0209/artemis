@@ -85,11 +85,11 @@ mod tests {
             bundle.set_refund_index(0);
 
             if let Err(e) = echo_executor.execute(bundle).await {
-                eprintln!("Failed to send bundle: {}", e);
+                tracing::error!("Failed to send bundle: {}", e);
                 return; // Exit gracefully instead of panicking
             }
         } else {
-            println!("Skipping test_chainbound_clients because FIBER_TEST_KEY is not set");
+            tracing::warn!("Skipping test_chainbound_clients because FIBER_TEST_KEY is not set");
         }
     }
 }

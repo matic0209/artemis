@@ -49,6 +49,16 @@ pub mod connection_pool;
 pub mod adaptive_tuner;
 /// Performance benchmark suite for optimization validation.
 pub mod benchmarks;
+/// Memory pool management for reducing allocation overhead.
+pub mod memory_pool;
+/// Batch processing for improved throughput.
+pub mod batch_processor;
+/// SIMD optimized mathematical calculations.
+pub mod simd_math;
+/// Zero-copy serialization for high-performance data processing.
+pub mod zero_copy;
+/// Comprehensive monitoring and alerting system.
+pub mod monitoring;
 
 // Suppress unused crate warnings
 use alloy as _;
