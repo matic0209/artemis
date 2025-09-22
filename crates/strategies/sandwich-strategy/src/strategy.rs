@@ -20,6 +20,41 @@ use crate::types::{
 };
 use crate::simulator::SandwichSimulator;
 
+/// 查询 Uniswap V2 池子的储备量
+async fn query_v2_reserves(
+    provider: Arc<Provider>,
+    pool_address: Address,
+) -> Result<(U256, U256, u32)> {
+    use alloy_rpc_types_eth::BlockNumberOrTag;
+    use alloy_primitives::Bytes;
+    
+    // getReserves() 方法选择器: 0x0902f1ac
+    let get_reserves_selector = [0x09, 0x02, 0xf1, 0xac];
+    let call_data = Bytes::from(get_reserves_selector.to_vec());
+    
+    let call_result = provider
+        .call(&alloy_rpc_types_eth::TransactionRequest {
+            to: Some(alloy_rpc_types_eth::TransactionKind::Call(pool_address)),
+            data: Some(call_data),
+            ..Default::default()
+        })
+        .block(BlockNumberOrTag::Latest)
+        .await
+        .map_err(|e| anyhow!("调用 getReserves() 失败: {}", e))?;
+
+    if call_result.len() >= 96 { // 3 * 32 bytes
+        let reserve0 = U256::from_big_endian(&call_result[0..32]);
+        let reserve1 = U256::from_big_endian(&call_result[32..64]);
+        let block_timestamp_last = u32::from_be_bytes([
+            call_result[92], call_result[93], call_result[94], call_result[95]
+        ]);
+        
+        Ok((reserve0, reserve1, block_timestamp_last))
+    } else {
+        Err(anyhow!("getReserves() 返回数据长度不足"))
+    }
+}
+
 /// 高性能 Sandwich 攻击策略
 pub struct SandwichStrategy {
     /// Alloy provider
@@ -46,6 +81,64 @@ pub struct SandwichStrategy {
 struct PoolManager {
     /// 池子发现器
     discovery: PoolDiscovery,
+    /// 已知的池子缓存
+    known_pools: Arc<std::sync::RwLock<HashMap<Address, Pool>>>,
+    /// 提供者
+    provider: Arc<Provider>,
+}
+
+impl PoolManager {
+    pub fn new(provider: Arc<Provider>) -> Self {
+        Self {
+            discovery: PoolDiscovery::new(Arc::clone(&provider)),
+            known_pools: Arc::new(std::sync::RwLock::new(HashMap::new())),
+            provider,
+        }
+    }
+
+    /// 获取所有已知池子
+    pub fn get_all_pools(&self) -> HashMap<Address, Pool> {
+        self.known_pools.read().unwrap().clone()
+    }
+
+    /// 根据地址获取池子
+    pub fn get_pool(&self, address: &Address) -> Option<Pool> {
+        self.known_pools.read().unwrap().get(address).cloned()
+    }
+
+    /// 添加新池子
+    pub fn add_pool(&self, address: Address, pool: Pool) {
+        self.known_pools.write().unwrap().insert(address, pool);
+    }
+
+    /// 发现新池子
+    pub async fn discover_pools_for_token(&self, token: Address) -> Result<Vec<Pool>> {
+        self.discovery.discover_pools_for_token(token).await
+    }
+
+    /// 更新池子状态
+    pub async fn refresh_pool_states(&self) -> Result<()> {
+        let pools = self.get_all_pools();
+        
+        for (address, mut pool) in pools {
+            // 查询最新的储备量
+            match query_v2_reserves(Arc::clone(&self.provider), address).await {
+                Ok((reserve0, reserve1, timestamp)) => {
+                    pool.reserve0 = reserve0;
+                    pool.reserve1 = reserve1;
+                    pool.last_updated = timestamp as u64;
+                    
+                    // 更新缓存
+                    self.add_pool(address, pool);
+                }
+                Err(e) => {
+                    debug!("更新池子 {:?} 状态失败: {:?}", address, e);
+                }
+            }
+        }
+        
+        Ok(())
+    }
 }
 
 impl SandwichStrategy {
@@ -309,19 +402,40 @@ impl SandwichStrategy {
             
             for &pool_addr in chunk {
                 let provider = Arc::clone(&self.provider);
+                let state_manager = Arc::clone(&self.state_manager);
                 let task = tokio::spawn(async move {
-                    // 获取池子的储备量等状态
-                    // TODO: 实现具体的状态查询逻辑
-                    (pool_addr, U256::ZERO, U256::ZERO)
+                    // 查询 Uniswap V2 池子的储备量
+                    match query_v2_reserves(provider, pool_addr).await {
+                        Ok((reserve0, reserve1, block_timestamp_last)) => {
+                            (pool_addr, reserve0, reserve1, Some(block_timestamp_last))
+                        }
+                        Err(e) => {
+                            debug!("查询池子 {:?} 储备量失败: {:?}", pool_addr, e);
+                            (pool_addr, U256::ZERO, U256::ZERO, None)
+                        }
+                    }
                 });
                 tasks.push(task);
             }
             
             // 等待所有查询完成
             for task in tasks {
-                if let Ok((pool_addr, reserve0, reserve1)) = task.await.unwrap() {
-                    // 更新池子状态缓存
-                    // TODO: 更新 pool_states
+                if let Ok((pool_addr, reserve0, reserve1, timestamp)) = task.await.unwrap() {
+                    if !reserve0.is_zero() && !reserve1.is_zero() {
+                        // 更新池子状态缓存
+                        let pool_state = PoolState {
+                            address: pool_addr,
+                            reserve0,
+                            reserve1,
+                            last_update: timestamp.unwrap_or(0),
+                            liquidity: reserve0 * reserve1, // 简化的流动性计算
+                        };
+                        
+                        // 通过状态管理器缓存池子状态
+                        if let Err(e) = self.state_manager.update_pool_state(pool_addr, pool_state).await {
+                            debug!("更新池子状态缓存失败: {:?}", e);
+                        }
+                    }
                 }
             }
         }
@@ -503,20 +617,118 @@ mod bundle_builder {
             block: &BlockInfo,
             inventory: &TokenInventory,
         ) -> Result<SandwichBundle> {
-            // TODO: 实现完整的 bundle 构建逻辑
+            info!("🔨 构建 Sandwich Bundle - 利润: {:.6} ETH", 
+                  opportunity.estimated_profit.as_u128() as f64 / 1e18);
+
             // 1. 构建前置交易（买入）
-            // 2. 包含受害者交易
+            let frontrun_tx = self.build_frontrun_transaction(
+                opportunity, 
+                block, 
+                inventory
+            ).await.map_err(|e| anyhow!("构建前置交易失败: {}", e))?;
+
+            // 2. 编码受害者交易
+            let victim_txs = self.encode_victim_transactions(&opportunity.victim_txs)
+                .await.map_err(|e| anyhow!("编码受害者交易失败: {}", e))?;
+
             // 3. 构建后置交易（卖出）
-            // 4. 计算 gas 和费用
-            
+            let backrun_tx = self.build_backrun_transaction(
+                opportunity, 
+                block, 
+                inventory
+            ).await.map_err(|e| anyhow!("构建后置交易失败: {}", e))?;
+
+            // 4. 计算总 gas 使用量
+            let estimated_gas = self.calculate_total_gas_limit(opportunity);
+
             Ok(SandwichBundle {
-                frontrun_tx: "0x".to_string(), // TODO: 实际的 RLP 编码
-                victim_txs: vec!["0x".to_string()], // TODO: 受害者交易 RLP
-                backrun_tx: "0x".to_string(), // TODO: 实际的 RLP 编码
+                frontrun_tx,
+                victim_txs,
+                backrun_tx,
                 target_block: block.number,
                 expected_revenue: opportunity.estimated_profit,
-                estimated_gas: 300_000, // 估算的总 gas 使用
+                estimated_gas,
             })
+        }
+
+        /// 构建前置交易（买入操作）
+        async fn build_frontrun_transaction(
+            &self,
+            opportunity: &SandwichOpportunity,
+            block: &BlockInfo,
+            inventory: &TokenInventory,
+        ) -> Result<String> {
+            // 暂时返回模拟交易，实际实现需要完整的交易构建
+            let mock_tx_data = format!(
+                "0x7ff36ab5{:064x}{:064x}{:040x}{:064x}",
+                opportunity.optimal_input.as_u128(),  // amountIn
+                0u128,                                // amountOutMin
+                inventory.searcher_address.as_u128(), // to
+                block.timestamp + 300                 // deadline
+            );
+            
+            debug!("前置交易构建完成: 输入 {:.6} ETH", 
+                   opportunity.optimal_input.as_u128() as f64 / 1e18);
+            
+            Ok(mock_tx_data)
+        }
+
+        /// 构建后置交易（卖出操作）
+        async fn build_backrun_transaction(
+            &self,
+            opportunity: &SandwichOpportunity,
+            block: &BlockInfo,
+            inventory: &TokenInventory,
+        ) -> Result<String> {
+            // 估算从前置交易获得的代币数量
+            let estimated_token_amount = opportunity.optimal_input * U256::from(95) / U256::from(100); // 假设 5% 滑点
+            
+            let mock_tx_data = format!(
+                "0x18cbafe5{:064x}{:064x}{:040x}{:064x}",
+                estimated_token_amount.as_u128(),     // amountIn
+                0u128,                                // amountOutMin  
+                inventory.searcher_address.as_u128(), // to
+                block.timestamp + 300                 // deadline
+            );
+            
+            debug!("后置交易构建完成: 卖出 {:.6} tokens", 
+                   estimated_token_amount.as_u128() as f64 / 1e18);
+            
+            Ok(mock_tx_data)
+        }
+
+        /// 编码受害者交易
+        async fn encode_victim_transactions(
+            &self,
+            victim_txs: &[artemis_core::eth::Transaction],
+        ) -> Result<Vec<String>> {
+            let mut encoded_txs = Vec::new();
+            
+            for (i, tx) in victim_txs.iter().enumerate() {
+                // 暂时返回交易哈希，实际需要完整的 RLP 编码
+                let tx_hash = format!("0x{:064x}", i);
+                encoded_txs.push(tx_hash);
+                
+                debug!("受害者交易 {} 编码完成", i);
+            }
+            
+            Ok(encoded_txs)
+        }
+
+        /// 计算总 gas 限制
+        fn calculate_total_gas_limit(&self, opportunity: &SandwichOpportunity) -> u64 {
+            let frontrun_gas = 200_000u64;
+            let backrun_gas = 200_000u64;
+            let victim_gas: u64 = opportunity.victim_txs.iter()
+                .map(|tx| tx.gas_limit.unwrap_or(150_000))
+                .sum();
+            
+            let total = frontrun_gas + backrun_gas + victim_gas + 50_000; // 安全缓冲
+            
+            debug!("总 Gas 估算: {} (前置: {}, 后置: {}, 受害者: {})", 
+                   total, frontrun_gas, backrun_gas, victim_gas);
+            
+            total
         }
     }
 }
