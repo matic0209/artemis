@@ -47,9 +47,17 @@ pub mod pools;
 /// 状态查询模块
 pub mod state_queries;
 
+/// REVM 引擎模块 - 高精度链上模拟
+pub mod revm_engine;
+
+/// 交易执行器模块 - 三阶段 Sandwich 执行
+pub mod transaction_executor;
+
 // 重新导出主要类型
 pub use strategy::SandwichStrategy;
 pub use types::{Event, Action, SandwichConfig, SandwichBundle, SandwichOpportunity};
 pub use collectors::sandwich_mempool_collector::SandwichMempoolCollector;
 pub use executors::sandwich_executor::SandwichExecutor;
 pub use state_queries::{StateQuerier, PoolStateMonitor};
+pub use revm_engine::{RevmEngine, RevmConfig};
+pub use transaction_executor::{TransactionExecutor, SandwichSimulationResult};

@@ -211,6 +211,8 @@ pub struct PoolState {
 /// 代币余额缓存
 #[derive(Debug, Clone)]
 pub struct TokenInventory {
+    /// 搜索者地址
+    pub searcher_address: Address,
     /// WETH 余额
     pub weth_balance: U256,
     /// 其他代币余额
@@ -220,9 +222,20 @@ pub struct TokenInventory {
 }
 
 impl TokenInventory {
-    pub fn new() -> Self {
+    pub fn new(searcher_address: Address) -> Self {
         Self {
+            searcher_address,
             weth_balance: U256::ZERO,
+            token_balances: HashMap::new(),
+            last_updated: 0,
+        }
+    }
+    
+    /// 创建带初始 WETH 余额的库存
+    pub fn with_weth_balance(searcher_address: Address, weth_balance: U256) -> Self {
+        Self {
+            searcher_address,
+            weth_balance,
             token_balances: HashMap::new(),
             last_updated: 0,
         }

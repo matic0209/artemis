@@ -1,26 +1,58 @@
 use std::sync::Arc;
 use anyhow::{anyhow, Result};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
+use tokio::sync::Mutex;
 
 use artemis_core::eth::{Provider, Address, U256};
-use crate::types::{SandwichOpportunity, BlockInfo, TokenInventory};
+use crate::types::{SandwichOpportunity, BlockInfo, TokenInventory, SandwichConfig};
+use crate::revm_engine::{RevmEngine, RevmConfig};
+use crate::transaction_executor::{TransactionExecutor, SandwichSimulationResult};
 use alloy_consensus::transaction::Transaction as TransactionTrait;
 use alloy_eips::eip2718::Encodable2718;
 
-/// 高性能 Sandwich 模拟器
+/// 高性能 Sandwich 模拟器 (集成 REVM)
 pub struct SandwichSimulator {
     provider: Arc<Provider>,
-    // TODO: 添加 revm 实例
+    /// REVM 引擎
+    revm_engine: Option<Arc<Mutex<RevmEngine>>>,
+    /// 交易执行器
+    transaction_executor: Option<TransactionExecutor>,
+    /// 配置
+    config: SandwichConfig,
 }
 
 impl SandwichSimulator {
-    pub fn new(provider: Arc<Provider>) -> Self {
-        Self { provider }
+    pub fn new(provider: Arc<Provider>, config: SandwichConfig) -> Self {
+        Self { 
+            provider,
+            revm_engine: None,
+            transaction_executor: None,
+            config,
+        }
     }
 
-    pub async fn initialize(&mut self, pools: &std::collections::HashMap<Address, cfmms::pool::Pool>) -> Result<()> {
-        info!("🧪 初始化 Sandwich 模拟器，池子数量: {}", pools.len());
-        // TODO: 设置 revm 环境和池子状态
+    pub async fn initialize(&mut self, block: &BlockInfo) -> Result<()> {
+        info!("🧪 初始化 Sandwich 模拟器 - 区块: {}", block.number);
+        
+        // 创建 REVM 引擎
+        let revm_config = RevmConfig::default();
+        let mut revm_engine = RevmEngine::new(block, Some(revm_config))?;
+        
+        // 从链上同步状态
+        revm_engine.sync_from_chain(self.provider.clone()).await?;
+        
+        let engine_arc = Arc::new(Mutex::new(revm_engine));
+        
+        // 创建交易执行器
+        let transaction_executor = TransactionExecutor::new(
+            engine_arc.clone(),
+            self.config.clone(),
+        );
+        
+        self.revm_engine = Some(engine_arc);
+        self.transaction_executor = Some(transaction_executor);
+        
+        info!("✅ Sandwich 模拟器初始化完成");
         Ok(())
     }
 
@@ -86,135 +118,70 @@ impl SandwichSimulator {
         Ok(U256::from(optimal_input))
     }
 
-    /// 详细的 revm 模拟（精确但较慢）
+    /// 详细的 REVM 模拟（精确但较慢）
     pub async fn simulate_detailed(
         &self,
         opportunity: &SandwichOpportunity,
         block: &BlockInfo,
         inventory: &TokenInventory,
-    ) -> Result<(U256, u64, u64)> {
-        // 实现完整的 revm 模拟
-        debug!("🧪 开始详细 revm 模拟");
+    ) -> Result<SandwichSimulationResult> {
+        debug!("🧪 开始详细 REVM 模拟");
         
-        // 1. 设置 revm 环境
-        let mut evm = self.create_evm_instance(block).await?;
+        // 检查是否已初始化
+        let executor = self.transaction_executor.as_ref()
+            .ok_or_else(|| anyhow!("模拟器未初始化，请先调用 initialize()"))?;
         
-        // 2. 设置初始状态（WETH 余额等）
-        self.setup_initial_state(&mut evm, inventory).await?;
-        
-        // 3. 模拟前置交易（买入中间代币）
-        let frontrun_result = self.simulate_frontrun_tx(&mut evm, opportunity).await?;
-        let frontrun_gas = frontrun_result.gas_used;
-        
-        // 4. 模拟受害者交易
-        for victim_tx in &opportunity.victim_txs {
-            self.simulate_victim_tx(&mut evm, victim_tx).await?;
+        // 设置搜索者账户初始状态
+        if let Some(engine) = &self.revm_engine {
+            let mut engine_guard = engine.lock().await;
+            engine_guard.state_manager.setup_searcher_account(
+                inventory.searcher_address,
+                inventory.weth_balance,
+            )?;
         }
         
-        // 5. 模拟后置交易（卖出中间代币）
-        let backrun_result = self.simulate_backrun_tx(&mut evm, opportunity).await?;
-        let backrun_gas = backrun_result.gas_used;
+        // 执行完整的三阶段模拟
+        let result = executor.execute_sandwich_simulation(
+            opportunity,
+            inventory.searcher_address,
+            inventory,
+        ).await?;
         
-        // 6. 计算净利润
-        let final_weth_balance = self.get_weth_balance_from_evm(&evm).await?;
-        let initial_weth_balance = inventory.get_weth_balance();
-        let net_profit = final_weth_balance.saturating_sub(initial_weth_balance);
+        debug!("🧪 REVM 模拟完成 - 成功: {}, 净利润: {:.4} ETH", 
+               result.success, 
+               result.net_profit.as_u128() as f64 / 1e18);
         
-        debug!("🧪 模拟完成 - 净利润: {:.4} ETH", net_profit.to::<u128>() as f64 / 1e18);
-        
-        Ok((net_profit, frontrun_gas, backrun_gas))
+        Ok(result)
     }
 
-    /// 创建 revm 实例
-    async fn create_evm_instance(&self, block: &BlockInfo) -> Result<revm::Evm<'static, (), revm::InMemoryDB>> {
-        use revm::{Evm, InMemoryDB};
-        use revm::primitives::{BlockEnv, CfgEnv, SpecId};
-        
-        let mut cfg = CfgEnv::default();
-        cfg.spec_id = SpecId::LONDON; // 使用 London 硬分叉
-        
-        let mut block_env = BlockEnv::default();
-        block_env.number = revm::primitives::U256::from(block.number.to::<u64>());
-        block_env.basefee = revm::primitives::U256::from(block.base_fee_per_gas.to::<u128>());
-        block_env.timestamp = revm::primitives::U256::from(block.timestamp.to::<u128>());
-        
-        let db = InMemoryDB::default();
-        let mut evm = Evm::builder()
-            .with_cfg_env(cfg)
-            .with_block_env(block_env)
-            .with_db(db)
-            .build();
-        
-        Ok(evm)
-    }
-
-    /// 设置 EVM 初始状态
-    async fn setup_initial_state(
+    /// 快速盈利性检查（不使用 REVM）
+    pub async fn quick_profitability_check(
         &self,
-        evm: &mut revm::Evm<'static, (), revm::InMemoryDB>,
-        inventory: &TokenInventory,
-    ) -> Result<()> {
-        // 设置搜索者账户的 WETH 余额
-        // TODO: 实现账户状态设置
-        Ok(())
-    }
-
-    /// 模拟前置交易
-    async fn simulate_frontrun_tx(
-        &self,
-        evm: &mut revm::Evm<'static, (), revm::InMemoryDB>,
         opportunity: &SandwichOpportunity,
-    ) -> Result<SimulationResult> {
-        // TODO: 实现前置交易模拟
-        Ok(SimulationResult {
-            gas_used: 150_000,
-            success: true,
-            output: vec![],
-        })
+        block: &BlockInfo,
+    ) -> Result<bool> {
+        debug!("⚡ 快速盈利性检查");
+        
+        // 基于启发式算法快速评估
+        let estimated_profit = self.estimate_profit_heuristic(opportunity, block).await?;
+        let gas_cost = self.estimate_gas_cost(block).await?;
+        
+        let is_profitable = estimated_profit > gas_cost;
+        debug!("💰 预估利润: {:.4} ETH, Gas成本: {:.4} ETH, 盈利: {}", 
+               estimated_profit.as_u128() as f64 / 1e18,
+               gas_cost.as_u128() as f64 / 1e18,
+               is_profitable);
+        
+        Ok(is_profitable)
     }
-
-    /// 模拟受害者交易
-    async fn simulate_victim_tx(
-        &self,
-        evm: &mut revm::Evm<'static, (), revm::InMemoryDB>,
-        victim_tx: &artemis_core::eth::Transaction,
-    ) -> Result<SimulationResult> {
-        // TODO: 实现受害者交易模拟
-        Ok(SimulationResult {
-            gas_used: 100_000,
-            success: true,
-            output: vec![],
-        })
-    }
-
-    /// 模拟后置交易
-    async fn simulate_backrun_tx(
-        &self,
-        evm: &mut revm::Evm<'static, (), revm::InMemoryDB>,
-        opportunity: &SandwichOpportunity,
-    ) -> Result<SimulationResult> {
-        // TODO: 实现后置交易模拟
-        Ok(SimulationResult {
-            gas_used: 120_000,
-            success: true,
-            output: vec![],
-        })
-    }
-
-    /// 从 EVM 获取 WETH 余额
-    async fn get_weth_balance_from_evm(
-        &self,
-        evm: &revm::Evm<'static, (), revm::InMemoryDB>,
-    ) -> Result<U256> {
-        // TODO: 从 EVM 状态读取余额
-        Ok(U256::from(1_000_000_000_000_000_000u64)) // 1 ETH 示例
-    }
-
-    /// 模拟结果
-    struct SimulationResult {
-        gas_used: u64,
-        success: bool,
-        output: Vec<u8>,
+    
+    /// 估算 Gas 成本
+    async fn estimate_gas_cost(&self, block: &BlockInfo) -> Result<U256> {
+        // 估算三阶段交易的总 Gas 成本
+        let total_gas = 150_000 + 100_000 + 120_000; // 前置 + 受害者 + 后置
+        let gas_price = block.base_fee_per_gas * U256::from(12) / U256::from(10); // 1.2x base fee
+        
+        Ok(U256::from(total_gas) * gas_price)
     }
 
     /// 检查代币是否安全（Salmonella 检查）
