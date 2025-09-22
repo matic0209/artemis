@@ -33,14 +33,20 @@ impl SandwichMempoolCollector {
         // 预设的 DEX 路由器地址
         let mut target_routers = HashSet::new();
         
+        // 安全解析地址的辅助函数
+        fn parse_router_address(addr_str: &str) -> Address {
+            addr_str.parse()
+                .unwrap_or_else(|_| panic!("Invalid router address: {}", addr_str))
+        }
+        
         // Uniswap V2 Router
-        target_routers.insert("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D".parse().unwrap());
+        target_routers.insert(parse_router_address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"));
         // Uniswap V3 Router  
-        target_routers.insert("0xE592427A0AEce92De3Edee1F18E0157C05861564".parse().unwrap());
+        target_routers.insert(parse_router_address("0xE592427A0AEce92De3Edee1F18E0157C05861564"));
         // Sushiswap Router
-        target_routers.insert("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F".parse().unwrap());
+        target_routers.insert(parse_router_address("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F"));
         // 1inch Router
-        target_routers.insert("0x1111111254EEB25477B68fb85Ed929f73A960582".parse().unwrap());
+        target_routers.insert(parse_router_address("0x1111111254EEB25477B68fb85Ed929f73A960582"));
 
         Self {
             provider,
@@ -236,9 +242,15 @@ impl TransactionFilter {
     pub fn new() -> Self {
         let mut known_bots = HashSet::new();
         
+        // 安全解析地址的辅助函数
+        fn parse_bot_address(addr_str: &str) -> Address {
+            addr_str.parse()
+                .unwrap_or_else(|_| panic!("Invalid bot address: {}", addr_str))
+        }
+        
         // 添加一些已知的 MEV 机器人地址
-        known_bots.insert("0x5050e08626c499411b5d0e0b5af0e83d3fd82edf".parse().unwrap()); // Flashbots
-        known_bots.insert("0x00000000003b3cc22aF3aE1EAc0440BcEe416B40".parse().unwrap()); // MEV Bot
+        known_bots.insert(parse_bot_address("0x5050e08626c499411b5d0e0b5af0e83d3fd82edf")); // Flashbots
+        known_bots.insert(parse_bot_address("0x00000000003b3cc22aF3aE1EAc0440BcEe416B40")); // MEV Bot
         
         Self {
             known_bots,

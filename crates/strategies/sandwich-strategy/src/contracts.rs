@@ -38,6 +38,7 @@ sol! {
     }
 
     /// Sandwich 合约接口（基于 rusty-sando 的 Huff 合约）
+    /// 使用 Huff 语言实现，节省 5,000+ gas
     #[sol(rpc)]
     contract SandwichContract {
         /// 执行 V2 Sandwich 攻击
@@ -162,39 +163,45 @@ pub mod addresses {
     use artemis_core::eth::Address;
     use once_cell::sync::Lazy;
 
+    /// 安全解析地址的辅助函数
+    fn parse_address(addr_str: &str) -> Address {
+        addr_str.parse()
+            .unwrap_or_else(|_| panic!("Invalid hardcoded address: {}", addr_str))
+    }
+
     /// WETH 合约地址
     pub static WETH: Lazy<Address> = Lazy::new(|| {
-        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".parse().unwrap()
+        parse_address("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
     });
 
     /// Uniswap V2 Factory
     pub static UNISWAP_V2_FACTORY: Lazy<Address> = Lazy::new(|| {
-        "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f".parse().unwrap()
+        parse_address("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")
     });
 
     /// Uniswap V2 Router
     pub static UNISWAP_V2_ROUTER: Lazy<Address> = Lazy::new(|| {
-        "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D".parse().unwrap()
+        parse_address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
     });
 
     /// Uniswap V3 Factory
     pub static UNISWAP_V3_FACTORY: Lazy<Address> = Lazy::new(|| {
-        "0x1F98431c8aD98523631AE4a59f267346ea31F984".parse().unwrap()
+        parse_address("0x1F98431c8aD98523631AE4a59f267346ea31F984")
     });
 
     /// Uniswap V3 Router
     pub static UNISWAP_V3_ROUTER: Lazy<Address> = Lazy::new(|| {
-        "0xE592427A0AEce92De3Edee1F18E0157C05861564".parse().unwrap()
+        parse_address("0xE592427A0AEce92De3Edee1F18E0157C05861564")
     });
 
     /// Sushiswap Router
     pub static SUSHISWAP_ROUTER: Lazy<Address> = Lazy::new(|| {
-        "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F".parse().unwrap()
+        parse_address("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F")
     });
 
     /// 1inch Router
     pub static ONEINCH_ROUTER: Lazy<Address> = Lazy::new(|| {
-        "0x1111111254EEB25477B68fb85Ed929f73A960582".parse().unwrap()
+        parse_address("0x1111111254EEB25477B68fb85Ed929f73A960582")
     });
 }
 

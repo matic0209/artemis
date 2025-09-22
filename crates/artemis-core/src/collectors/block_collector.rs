@@ -1,5 +1,5 @@
 use crate::types::{Collector, CollectorStream};
-use crate::eth::{Hash as H256, U64};
+use crate::eth::{Hash, U64};
 use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -17,7 +17,7 @@ pub struct BlockCollector<P> {
 /// A new block event, containing the block number and hash.
 #[derive(Debug, Clone)]
 pub struct NewBlock {
-    pub hash: H256,
+    pub hash: Hash,
     pub number: U64,
 }
 
@@ -47,21 +47,23 @@ where
         let (tx, rx) = mpsc::channel::<NewBlock>(self.buffer_size);
         let provider = self.provider.clone();
         tokio::spawn(async move {
-            if let Ok(stream) = provider.subscribe_blocks().await {
-                let mut stream = stream.into_stream();
+            // Subscribe to new blocks using Alloy provider
+            if let Ok(mut stream) = provider.subscribe_blocks().await {
                 while let Some(block) = stream.next().await {
-                    let (hash, number) = (block.hash, block.number);
+                    let hash = block.hash;
+                    let number = U64::from(block.header.number);
                     let new_block = NewBlock { 
                         hash, 
-                        number: U64::from(number) 
+                        number
                     };
                     
                     if tx.send(new_block).await.is_err() {
                         break;
                     }
                     
-                    metrics::counter!("artemis.collectors.blocks.processed").increment(1);
-                    metrics::gauge!("artemis.collectors.blocks.latest_number").set(number as f64);
+                    // TODO: Add metrics back when metrics crate is properly configured
+                    // metrics::counter!("artemis.collectors.blocks.processed").increment(1);
+                    // metrics::gauge!("artemis.collectors.blocks.latest_number").set(number as f64);
                 }
             }
         });

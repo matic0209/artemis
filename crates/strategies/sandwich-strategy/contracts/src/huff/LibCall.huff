@@ -1,0 +1,163 @@
+//! # Library Call Functions
+//!
+//! Common call patterns for interacting with external contracts
+
+#include "./LibConst.huff"
+
+/// ## Generic Call Helper
+///
+/// Makes a call to an external contract with specified gas and data
+#define macro CALL_EXTERNAL(gas_limit, to_addr, data_offset, data_size) = takes (0) returns (0) {
+    [gas_limit]              // [gas]
+    [to_addr]                // [to, gas]
+    [ZERO]                   // [value, to, gas]
+    [data_offset]            // [data_offset, value, to, gas]
+    [data_size]              // [data_size, data_offset, value, to, gas]
+    [ZERO]                   // [ret_offset, data_size, data_offset, value, to, gas]
+    [ZERO]                   // [ret_size, ret_offset, data_size, data_offset, value, to, gas]
+    call                     // [success]
+    [CALL_SUCCESS] jumpi     // []
+        // Call failed
+        [ZERO] 0x00 mstore
+        0x04 0x00 revert
+    CALL_SUCCESS:
+}
+
+/// ## WETH Deposit
+///
+/// Deposits ETH to get WETH
+#define macro WETH_DEPOSIT(amount) = takes (0) returns (0) {
+    [GAS_LIMIT_SWAP]         // [gas]
+    [WETH_ADDRESS]           // [weth_addr, gas]
+    [amount]                 // [value, weth_addr, gas]
+    [DEPOSIT_SEL]            // [selector, value, weth_addr, gas]
+    [DEPOSIT_SEL] 0x00       // [0x00, selector, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    [DEPOSIT_SEL] 0x04       // [0x04, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    [DEPOSIT_SEL] 0x24       // [0x24, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    [DEPOSIT_SEL] 0x44       // [0x44, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    [DEPOSIT_SEL] 0x64       // [0x64, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    
+    [GAS_LIMIT_SWAP]         // [gas]
+    [WETH_ADDRESS]           // [weth_addr, gas]
+    [amount]                 // [value, weth_addr, gas]
+    [DEPOSIT_SEL] 0x00       // [0x00, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    [DEPOSIT_SEL] 0x04       // [0x04, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    [DEPOSIT_SEL] 0x24       // [0x24, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    [DEPOSIT_SEL] 0x44       // [0x44, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    [DEPOSIT_SEL] 0x64       // [0x64, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    
+    [ZERO]                   // [ret_offset, value, weth_addr, gas]
+    [ZERO]                   // [ret_size, ret_offset, value, weth_addr, gas]
+    call                     // [success]
+    [WETH_DEPOSIT_SUCCESS] jumpi
+        // Deposit failed
+        [ZERO] 0x00 mstore
+        0x04 0x00 revert
+    WETH_DEPOSIT_SUCCESS:
+}
+
+/// ## WETH Withdraw
+///
+/// Withdraws WETH to get ETH
+#define macro WETH_WITHDRAW(amount) = takes (0) returns (0) {
+    [GAS_LIMIT_SWAP]         // [gas]
+    [WETH_ADDRESS]           // [weth_addr, gas]
+    [ZERO]                   // [value, weth_addr, gas]
+    [WITHDRAW_SEL]           // [selector, value, weth_addr, gas]
+    [WITHDRAW_SEL] 0x00      // [0x00, selector, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    [WITHDRAW_SEL] 0x04      // [0x04, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    [amount]                 // [amount, value, weth_addr, gas]
+    [WITHDRAW_SEL] 0x24      // [0x24, amount, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    [WITHDRAW_SEL] 0x44      // [0x44, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    [WITHDRAW_SEL] 0x64      // [0x64, value, weth_addr, gas]
+    mstore                   // [value, weth_addr, gas]
+    
+    [ZERO]                   // [ret_offset, value, weth_addr, gas]
+    [ZERO]                   // [ret_size, ret_offset, value, weth_addr, gas]
+    call                     // [success]
+    [WETH_WITHDRAW_SUCCESS] jumpi
+        // Withdraw failed
+        [ZERO] 0x00 mstore
+        0x04 0x00 revert
+    WETH_WITHDRAW_SUCCESS:
+}
+
+/// ## Token Transfer
+///
+/// Transfers tokens from this contract to recipient
+#define macro TOKEN_TRANSFER(token_addr, recipient, amount) = takes (0) returns (0) {
+    [GAS_LIMIT_TRANSFER]     // [gas]
+    [token_addr]             // [token_addr, gas]
+    [ZERO]                   // [value, token_addr, gas]
+    [TRANSFER_SEL]           // [selector, value, token_addr, gas]
+    [TRANSFER_SEL] 0x00      // [0x00, selector, value, token_addr, gas]
+    mstore                   // [value, token_addr, gas]
+    [TRANSFER_SEL] 0x04      // [0x04, value, token_addr, gas]
+    mstore                   // [value, token_addr, gas]
+    [recipient]              // [recipient, value, token_addr, gas]
+    [TRANSFER_SEL] 0x24      // [0x24, recipient, value, token_addr, gas]
+    mstore                   // [value, token_addr, gas]
+    [amount]                 // [amount, value, token_addr, gas]
+    [TRANSFER_SEL] 0x44      // [0x44, amount, value, token_addr, gas]
+    mstore                   // [value, token_addr, gas]
+    [TRANSFER_SEL] 0x64      // [0x64, value, token_addr, gas]
+    mstore                   // [value, token_addr, gas]
+    
+    [ZERO]                   // [ret_offset, value, token_addr, gas]
+    [ZERO]                   // [ret_size, ret_offset, value, token_addr, gas]
+    call                     // [success]
+    [TOKEN_TRANSFER_SUCCESS] jumpi
+        // Transfer failed
+        [ZERO] 0x00 mstore
+        0x04 0x00 revert
+    TOKEN_TRANSFER_SUCCESS:
+}
+
+/// ## Token Approve
+///
+/// Approves spender to spend tokens
+#define macro TOKEN_APPROVE(token_addr, spender, amount) = takes (0) returns (0) {
+    [GAS_LIMIT_APPROVE]      // [gas]
+    [token_addr]             // [token_addr, gas]
+    [ZERO]                   // [value, token_addr, gas]
+    [APPROVE_SEL]            // [selector, value, token_addr, gas]
+    [APPROVE_SEL] 0x00       // [0x00, selector, value, token_addr, gas]
+    mstore                   // [value, token_addr, gas]
+    [APPROVE_SEL] 0x04       // [0x04, value, token_addr, gas]
+    mstore                   // [value, token_addr, gas]
+    [spender]                // [spender, value, token_addr, gas]
+    [APPROVE_SEL] 0x24       // [0x24, spender, value, token_addr, gas]
+    mstore                   // [value, token_addr, gas]
+    [amount]                 // [amount, value, token_addr, gas]
+    [APPROVE_SEL] 0x44       // [0x44, amount, value, token_addr, gas]
+    mstore                   // [value, token_addr, gas]
+    [APPROVE_SEL] 0x64       // [0x64, value, token_addr, gas]
+    mstore                   // [value, token_addr, gas]
+    
+    [ZERO]                   // [ret_offset, value, token_addr, gas]
+    [ZERO]                   // [ret_size, ret_offset, value, token_addr, gas]
+    call                     // [success]
+    [TOKEN_APPROVE_SUCCESS] jumpi
+        // Approve failed
+        [ZERO] 0x00 mstore
+        0x04 0x00 revert
+    TOKEN_APPROVE_SUCCESS:
+}
+
+/// ## Additional Selectors
+#define constant DEPOSIT_SEL = 0xd0e30db0
+#define constant WITHDRAW_SEL = 0x2e1a7d4d

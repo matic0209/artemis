@@ -39,6 +39,8 @@ pub mod executors;
 pub mod types;
 /// This module contains utilities for working with Artemis.
 pub mod utilities;
+/// Unified error handling system for Artemis.
+pub mod error;
 /// Intelligent state management with predictive caching.
 pub mod state_manager;
 /// High-performance connection pool for Ethereum providers.

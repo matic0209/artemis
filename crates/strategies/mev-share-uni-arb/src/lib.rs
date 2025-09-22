@@ -11,3 +11,15 @@ pub mod strategy;
 
 /// This module contains the core type definitions for the strategy.
 pub mod types;
+
+/// Configuration management for the strategy.
+pub mod config;
+
+/// Strategy tests.
+#[cfg(test)]
+mod tests;
+
+// Re-export main strategy components
+pub use strategy::{MevShareUniArb, ArbConfig, ArbStats};
+pub use alloy_impl::V2PoolInfo;
+pub use config::{StrategyConfig, ConfigLoader};

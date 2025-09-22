@@ -252,12 +252,12 @@ async fn run_metrics_server(handle: PrometheusHandle, addr: SocketAddr) {
                             .status(StatusCode::OK)
                             .header("Content-Type", "text/plain; version=0.0.4")
                             .body(Body::from(body))
-                            .unwrap()
+                            .expect("Failed to build metrics response")
                     } else {
                         Response::builder()
                             .status(StatusCode::NOT_FOUND)
                             .body(Body::empty())
-                            .unwrap()
+                            .expect("Failed to build 404 response")
                     };
                     Ok::<_, Infallible>(response)
                 }

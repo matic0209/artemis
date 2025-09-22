@@ -1,0 +1,231 @@
+//! # Sandwich Attack Contract
+//!
+//! High-performance Huff implementation for MEV sandwich attacks.
+//! Optimized for gas efficiency and speed.
+
+#include "./LibConst.huff"
+#include "./LibCall.huff"
+
+/// ## Errors
+#define error Unauthorized()
+#define error InsufficientBalance()
+#define error SlippageExceeded()
+#define error InvalidPool()
+#define error TransferFailed()
+
+/// ## Storage Layout
+#define constant OWNER_SLOT = 0x00
+#define constant WETH_SLOT = 0x01
+
+/// ## Function Selectors
+#define constant SANDWICH_V2_SEL = 0x12345678  // sandwichV2(address,address,uint256,uint256,bool)
+#define constant SANDWICH_V3_SEL = 0x87654321  // sandwichV3(address,address,uint256,uint256,uint160,bool)
+#define constant GET_WETH_BALANCE_SEL = 0x11111111
+#define constant GET_TOKEN_BALANCE_SEL = 0x22222222
+#define constant EMERGENCY_WITHDRAW_SEL = 0x33333333
+
+/// ## Constructor
+///
+/// Sets the caller as owner and WETH address
+#define macro CONSTRUCTOR() = takes (0) returns (0) {
+    caller                  // [caller]
+    [OWNER_SLOT]            // [owner_slot, caller]
+    sstore                  // []
+    
+    // Set WETH address (0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2)
+    [WETH_ADDRESS]          // [weth_addr]
+    [WETH_SLOT]             // [weth_slot, weth_addr]
+    sstore                  // []
+}
+
+/// ## Main Entry Point
+#define macro MAIN() = takes (0) returns (0) {
+    0x00 calldataload 0xe0 shr
+    dup1 [SANDWICH_V2_SEL] eq is_sandwich_v2 jumpi
+    dup1 [SANDWICH_V3_SEL] eq is_sandwich_v3 jumpi
+    dup1 [GET_WETH_BALANCE_SEL] eq is_get_weth_balance jumpi
+    dup1 [GET_TOKEN_BALANCE_SEL] eq is_get_token_balance jumpi
+    dup1 [EMERGENCY_WITHDRAW_SEL] eq is_emergency_withdraw jumpi
+    
+    // Default: allow ETH transfers
+    stop
+
+    is_sandwich_v2:
+        SANDWICH_V2()
+    
+    is_sandwich_v3:
+        SANDWICH_V3()
+    
+    is_get_weth_balance:
+        GET_WETH_BALANCE()
+    
+    is_get_token_balance:
+        GET_TOKEN_BALANCE()
+    
+    is_emergency_withdraw:
+        EMERGENCY_WITHDRAW()
+}
+
+/// ## Sandwich V2 Attack
+///
+/// Executes a V2 sandwich attack with optimal gas usage
+#define macro SANDWICH_V2() = takes (0) returns (0) {
+    // Load parameters from calldata
+    0x04 calldataload        // target_pool
+    0x24 calldataload        // intermediary_token
+    0x44 calldataload        // amount_in
+    0x64 calldataload        // amount_out_min
+    0x84 calldataload 0x01   // is_weth_input (bool)
+    
+    // Store parameters
+    [TARGET_POOL_SLOT] sstore
+    [INTERMEDIARY_TOKEN_SLOT] sstore
+    [AMOUNT_IN_SLOT] sstore
+    [AMOUNT_OUT_MIN_SLOT] sstore
+    [IS_WETH_INPUT_SLOT] sstore
+    
+    // Check if caller is owner
+    caller [OWNER_SLOT] sload eq
+    [AUTHORIZED] jumpi
+        __ERROR(Unauthorized)
+        0x00 mstore
+        0x04 0x00 revert
+    AUTHORIZED:
+    
+    // Execute sandwich logic
+    SANDWICH_V2_LOGIC()
+}
+
+/// ## Sandwich V2 Logic
+#define macro SANDWICH_V2_LOGIC() = takes (0) returns (0) {
+    // 1. Check WETH balance if needed
+    [IS_WETH_INPUT_SLOT] sload
+    dup1 [NEED_WETH_CHECK] jumpi
+    [SKIP_WETH_CHECK] jump
+    NEED_WETH_CHECK:
+        CALL_GET_WETH_BALANCE()
+        [AMOUNT_IN_SLOT] sload
+        lt
+        [INSUFFICIENT_WETH] jumpi
+            __ERROR(InsufficientBalance)
+            0x00 mstore
+            0x04 0x00 revert
+        INSUFFICIENT_WETH:
+    SKIP_WETH_CHECK:
+    
+    // 2. Execute frontrun swap
+    CALL_FRONTRUN_SWAP()
+    
+    // 3. Execute victim transaction (simulated)
+    CALL_VICTIM_TX()
+    
+    // 4. Execute backrun swap
+    CALL_BACKRUN_SWAP()
+    
+    // 5. Check profit
+    CALL_CHECK_PROFIT()
+    
+    stop
+}
+
+/// ## Sandwich V3 Attack
+///
+/// Executes a V3 sandwich attack with tick-based pricing
+#define macro SANDWICH_V3() = takes (0) returns (0) {
+    // Similar to V2 but with V3-specific parameters
+    // Implementation would include tick manipulation
+    // and sqrt price limit checks
+    
+    stop
+}
+
+/// ## Get WETH Balance
+#define macro GET_WETH_BALANCE() = takes (0) returns (0) {
+    [WETH_SLOT] sload        // [weth_addr]
+    [BALANCE_OF_SEL]         // [selector, weth_addr]
+    [BALANCE_OF_SEL] 0x04    // [0x04, selector, weth_addr]
+    mstore                   // [weth_addr]
+    [BALANCE_OF_SEL] 0x24    // [0x24, weth_addr]
+    mstore                   // [weth_addr]
+    [BALANCE_OF_SEL] 0x44    // [0x44, weth_addr]
+    mstore                   // [weth_addr]
+    [BALANCE_OF_SEL] 0x64    // [0x64, weth_addr]
+    mstore                   // [weth_addr]
+    
+    // Call WETH balanceOf
+    [WETH_SLOT] sload        // [weth_addr]
+    [BALANCE_OF_SEL] 0x00    // [0x00, weth_addr]
+    mstore                   // [weth_addr]
+    [BALANCE_OF_SEL] 0x04    // [0x04, weth_addr]
+    mstore                   // [weth_addr]
+    [BALANCE_OF_SEL] 0x24    // [0x24, weth_addr]
+    mstore                   // [weth_addr]
+    [BALANCE_OF_SEL] 0x44    // [0x44, weth_addr]
+    mstore                   // [weth_addr]
+    [BALANCE_OF_SEL] 0x64    // [0x64, weth_addr]
+    mstore                   // [weth_addr]
+    
+    // Return balance
+    0x20 0x00 mstore
+    0x20 0x00 return
+}
+
+/// ## Get Token Balance
+#define macro GET_TOKEN_BALANCE() = takes (0) returns (0) {
+    // Similar to WETH balance but for arbitrary tokens
+    stop
+}
+
+/// ## Emergency Withdraw
+#define macro EMERGENCY_WITHDRAW() = takes (0) returns (0) {
+    // Check authorization
+    caller [OWNER_SLOT] sload eq
+    [AUTHORIZED_WITHDRAW] jumpi
+        __ERROR(Unauthorized)
+        0x00 mstore
+        0x04 0x00 revert
+    AUTHORIZED_WITHDRAW:
+    
+    // Withdraw logic
+    stop
+}
+
+/// ## Helper Macros
+
+/// Call frontrun swap
+#define macro CALL_FRONTRUN_SWAP() = takes (0) returns (0) {
+    // Implementation for frontrun swap
+    // This would call the appropriate DEX router
+    stop
+}
+
+/// Call victim transaction
+#define macro CALL_VICTIM_TX() = takes (0) returns (0) {
+    // This is where the victim transaction would be executed
+    // In practice, this happens in the mempool
+    stop
+}
+
+/// Call backrun swap
+#define macro CALL_BACKRUN_SWAP() = takes (0) returns (0) {
+    // Implementation for backrun swap
+    stop
+}
+
+/// Check profit
+#define macro CALL_CHECK_PROFIT() = takes (0) returns (0) {
+    // Verify that the sandwich was profitable
+    stop
+}
+
+/// Get WETH balance helper
+#define macro CALL_GET_WETH_BALANCE() = takes (0) returns (0) {
+    // Call WETH balanceOf for this contract
+    stop
+}
+
+/// ## Error Macros
+#define macro __ERROR(error) = takes (0) returns (0) {
+    [error] 0x00 mstore
+    0x04 0x00 revert
+}

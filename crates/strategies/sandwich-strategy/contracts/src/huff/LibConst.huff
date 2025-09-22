@@ -1,0 +1,34 @@
+//! # Library Constants
+//!
+//! Common constants used across the sandwich contract
+
+/// ## Storage Slots
+#define constant TARGET_POOL_SLOT = 0x02
+#define constant INTERMEDIARY_TOKEN_SLOT = 0x03
+#define constant AMOUNT_IN_SLOT = 0x04
+#define constant AMOUNT_OUT_MIN_SLOT = 0x05
+#define constant IS_WETH_INPUT_SLOT = 0x06
+
+/// ## Contract Addresses
+#define constant WETH_ADDRESS = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+#define constant UNISWAP_V2_ROUTER = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
+#define constant UNISWAP_V3_ROUTER = 0xE592427A0AEce92De3Edee1F18E0157C05861564
+
+/// ## Function Selectors
+#define constant BALANCE_OF_SEL = 0x70a08231
+#define constant TRANSFER_SEL = 0xa9059c2c
+#define constant APPROVE_SEL = 0x095ea7b3
+#define constant SWAP_EXACT_TOKENS_FOR_TOKENS_SEL = 0x38ed1739
+#define constant SWAP_EXACT_ETH_FOR_TOKENS_SEL = 0x7ff36ab5
+#define constant SWAP_TOKENS_FOR_EXACT_ETH_SEL = 0x4a25d94a
+#define constant EXACT_INPUT_SINGLE_SEL = 0x414bf389
+
+/// ## Common Values
+#define constant ZERO = 0x00
+#define constant ONE = 0x01
+#define constant MAX_UINT256 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+
+/// ## Gas Limits
+#define constant GAS_LIMIT_SWAP = 200000
+#define constant GAS_LIMIT_APPROVE = 50000
+#define constant GAS_LIMIT_TRANSFER = 50000

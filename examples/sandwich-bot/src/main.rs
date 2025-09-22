@@ -121,7 +121,8 @@ async fn run_sandwich_bot(args: Args) -> Result<()> {
     let sandwich_config = SandwichConfig {
         sandwich_contract: args.sandwich_contract.parse()?,
         searcher_address,
-        weth_address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".parse().unwrap(),
+        weth_address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".parse()
+            .map_err(|e| anyhow::anyhow!("Invalid WETH address: {}", e))?,
         min_profit_threshold: artemis_core::eth::U256::from(
             (args.min_profit_eth * 1e18) as u128
         ),

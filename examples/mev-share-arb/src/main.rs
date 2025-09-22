@@ -306,7 +306,8 @@ mod tests {
     #[test]
     fn converts_mev_share_bundle_to_alloy_bundle() {
         let request = sample_request();
-        let converted = convert_bundle(request).expect("conversion should succeed");
+        let converted = convert_bundle(request)
+            .expect("conversion should succeed");
 
         assert_eq!(converted.protocol_version, AlloyProtocolVersion::V0_1);
         assert_eq!(converted.inclusion.block, 1);
@@ -328,35 +329,61 @@ mod tests {
             other => panic!("unexpected bundle item: {:?}", other),
         }
 
-        let validity = converted.validity.expect("validity expected");
-        let refund = validity.refund.expect("refund expected");
-        assert_eq!(refund.len(), 1);
-        assert_eq!(refund[0].body_idx, 1);
-        assert_eq!(refund[0].percent, 10);
+        // Test validity section with proper error handling
+        match &converted.validity {
+            Some(validity) => {
+                match &validity.refund {
+                    Some(refund) => {
+                        assert_eq!(refund.len(), 1);
+                        assert_eq!(refund[0].body_idx, 1);
+                        assert_eq!(refund[0].percent, 10);
+                    }
+                    None => panic!("refund expected in validity section"),
+                }
 
-        let refund_config = validity.refund_config.expect("refund config expected");
-        assert_eq!(refund_config.len(), 1);
-        assert_eq!(
-            refund_config[0].address,
-            AlloyAddress::from_slice(&[0x22; 20])
-        );
-        assert_eq!(refund_config[0].percent, 5);
+                match &validity.refund_config {
+                    Some(refund_config) => {
+                        assert_eq!(refund_config.len(), 1);
+                        assert_eq!(
+                            refund_config[0].address,
+                            AlloyAddress::from_slice(&[0x22; 20])
+                        );
+                        assert_eq!(refund_config[0].percent, 5);
+                    }
+                    None => panic!("refund_config expected in validity section"),
+                }
+            }
+            None => panic!("validity section expected"),
+        }
 
-        let privacy = converted.privacy.expect("privacy expected");
-        let hints = privacy.hints.expect("hints expected");
-        assert!(hints.calldata);
-        assert!(hints.logs);
-        assert!(hints.hash);
-        assert!(!hints.contract_address);
-        assert!(!hints.function_selector);
-        assert!(!hints.tx_hash);
+        // Test privacy section with proper error handling
+        match &converted.privacy {
+            Some(privacy) => {
+                match &privacy.hints {
+                    Some(hints) => {
+                        assert!(hints.calldata);
+                        assert!(hints.logs);
+                        assert!(hints.hash);
+                        assert!(!hints.contract_address);
+                        assert!(!hints.function_selector);
+                        assert!(!hints.tx_hash);
+                    }
+                    None => panic!("hints expected in privacy section"),
+                }
 
-        let builders = privacy.builders.expect("builders expected");
-        assert_eq!(builders.len(), 1);
-        assert_eq!(
-            builders[0],
-            format!("{:#x}", EthersAddress::from_slice(&[0x33; 20]))
-        );
+                match &privacy.builders {
+                    Some(builders) => {
+                        assert_eq!(builders.len(), 1);
+                        assert_eq!(
+                            builders[0],
+                            format!("{:#x}", EthersAddress::from_slice(&[0x33; 20]))
+                        );
+                    }
+                    None => panic!("builders expected in privacy section"),
+                }
+            }
+            None => panic!("privacy section expected"),
+        }
     }
 
     #[test]
@@ -375,7 +402,8 @@ mod tests {
             privacy: None,
         };
 
-        let converted = convert_bundle(request).expect("conversion should not fail");
+        let converted = convert_bundle(request)
+            .expect("conversion should not fail");
         assert_eq!(converted.protocol_version, AlloyProtocolVersion::Beta1);
         assert_eq!(converted.inclusion.block, 5);
         assert!(converted.inclusion.max_block.is_none());

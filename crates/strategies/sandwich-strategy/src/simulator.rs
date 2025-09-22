@@ -269,8 +269,16 @@ impl SandwichSimulator {
         ];
         
         for &bad_token in &known_bad_tokens {
-            if token == bad_token.parse::<Address>().unwrap() {
-                return Ok(false);
+            match bad_token.parse::<Address>() {
+                Ok(parsed_token) => {
+                    if token == parsed_token {
+                        return Ok(false);
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to parse bad token address '{}': {}", bad_token, e);
+                    // Continue checking other tokens
+                }
             }
         }
         
