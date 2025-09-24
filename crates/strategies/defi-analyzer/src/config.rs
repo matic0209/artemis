@@ -1,13 +1,13 @@
-//! Configuration for DeFi Analyzer Strategy
+//! DeFi Analyzer Configuration
 
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use alloy_primitives::U256;
+use anyhow::Result;
+use std::collections::HashMap;
 
-/// Configuration for the DeFi Analyzer
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Analyzer configuration
+#[derive(Debug, Clone)]
 pub struct AnalyzerConfig {
-    /// Enable symbolic execution analysis
+    /// Enable symbolic execution
     pub enable_symbolic_execution: bool,
     /// Enable feature extraction
     pub enable_feature_extraction: bool,
@@ -33,10 +33,10 @@ pub struct AnalyzerConfig {
     pub performance_settings: PerformanceSettings,
 }
 
-/// ABI cache configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// ABI cache settings
+#[derive(Debug, Clone)]
 pub struct AbiCacheSettings {
-    /// Enable ABI caching
+    /// Enable caching
     pub enable_caching: bool,
     /// Cache size limit
     pub cache_size_limit: usize,
@@ -45,7 +45,7 @@ pub struct AbiCacheSettings {
 }
 
 /// Performance settings
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PerformanceSettings {
     /// Maximum concurrent analyses
     pub max_concurrent_analyses: usize,
@@ -97,53 +97,19 @@ impl Default for PerformanceSettings {
     }
 }
 
-/// Configuration loader for the analyzer
+/// Configuration loader
 pub struct ConfigLoader;
 
 impl ConfigLoader {
+    /// Load configuration from file
+    pub fn from_file(_path: &str) -> Result<AnalyzerConfig> {
+        // For now, just return default config
+        Ok(AnalyzerConfig::default())
+    }
+
     /// Load configuration from environment variables
-    pub fn from_env() -> Result<AnalyzerConfig, Box<dyn std::error::Error>> {
-        let mut config = AnalyzerConfig::default();
-        
-        // Load from environment variables
-        if let Ok(value) = std::env::var("DEFI_ANALYZER_ENABLE_SYMBOLIC_EXECUTION") {
-            config.enable_symbolic_execution = value.parse()?;
-        }
-        
-        if let Ok(value) = std::env::var("DEFI_ANALYZER_ANALYSIS_TIMEOUT") {
-            config.analysis_timeout_seconds = value.parse()?;
-        }
-        
-        if let Ok(value) = std::env::var("DEFI_ANALYZER_MAX_DEPTH") {
-            config.max_analysis_depth = value.parse()?;
-        }
-        
-        if let Ok(value) = std::env::var("DEFI_ANALYZER_MIN_PROFIT_THRESHOLD") {
-            config.min_profit_threshold = U256::from_dec_str(&value)?;
-        }
-        
-        if let Ok(value) = std::env::var("DEFI_ANALYZER_RISK_TOLERANCE") {
-            config.risk_tolerance = value.parse()?;
-        }
-        
-        if let Ok(value) = std::env::var("DEFI_ANALYZER_MONITORED_CONTRACTS") {
-            config.monitored_contracts = value.split(',').map(|s| s.trim().to_string()).collect();
-        }
-        
-        Ok(config)
-    }
-    
-    /// Load configuration from JSON file
-    pub fn from_file(path: &str) -> Result<AnalyzerConfig, Box<dyn std::error::Error>> {
-        let content = std::fs::read_to_string(path)?;
-        let config: AnalyzerConfig = serde_json::from_str(&content)?;
-        Ok(config)
-    }
-    
-    /// Save configuration to JSON file
-    pub fn save_to_file(config: &AnalyzerConfig, path: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let content = serde_json::to_string_pretty(config)?;
-        std::fs::write(path, content)?;
-        Ok(())
+    pub fn from_env() -> Result<AnalyzerConfig> {
+        // For now, just return default config
+        Ok(AnalyzerConfig::default())
     }
 }

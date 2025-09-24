@@ -1,19 +1,17 @@
-//! Type definitions for DeFi Analyzer Strategy
+//! DeFi Analyzer Types
 
+use alloy_primitives::{Address, U256};
 use std::collections::HashMap;
-use alloy_primitives::{Address, U256, Bytes};
-use serde::{Deserialize, Serialize};
-use defi_aligner_rs::Result as DeFiResult;
 
-/// Analysis event from Artemis collectors
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Analysis event
+#[derive(Debug, Clone)]
 pub struct AnalysisEvent {
     /// Event type
     pub event_type: EventType,
     /// Contract address being analyzed
     pub contract_address: Address,
     /// Transaction data
-    pub tx_data: Option<Bytes>,
+    pub tx_data: Option<Vec<u8>>,
     /// Block number
     pub block_number: u64,
     /// Timestamp
@@ -22,23 +20,23 @@ pub struct AnalysisEvent {
     pub metadata: HashMap<String, String>,
 }
 
-/// Types of events that can trigger analysis
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Event types
+#[derive(Debug, Clone)]
 pub enum EventType {
-    /// New transaction in mempool
+    /// Mempool transaction
     MempoolTransaction,
-    /// New block with DeFi activity
+    /// Block with DeFi activity
     BlockWithDeFiActivity,
     /// Contract deployment
     ContractDeployment,
     /// MEV-Share event
     MevShareEvent,
-    /// Custom analysis trigger
+    /// Custom analysis
     CustomAnalysis,
 }
 
-/// Analysis action to be executed
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Analysis action
+#[derive(Debug, Clone)]
 pub struct AnalysisAction {
     /// Action type
     pub action_type: ActionType,
@@ -46,29 +44,29 @@ pub struct AnalysisAction {
     pub contract_address: Address,
     /// Analysis parameters
     pub parameters: AnalysisParameters,
-    /// Priority (higher = more urgent)
+    /// Priority (0-100)
     pub priority: u8,
 }
 
-/// Types of analysis actions
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Action types
+#[derive(Debug, Clone)]
 pub enum ActionType {
-    /// Run symbolic execution analysis
+    /// Symbolic execution
     SymbolicExecution,
-    /// Extract DeFi features
+    /// Feature extraction
     FeatureExtraction,
-    /// Compare with documentation
+    /// Documentation comparison
     DocumentationComparison,
-    /// Generate analysis report
+    /// Generate report
     GenerateReport,
 }
 
 /// Analysis parameters
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct AnalysisParameters {
-    /// ABI JSON string
+    /// ABI JSON
     pub abi_json: Option<String>,
-    /// Function name to analyze
+    /// Function name
     pub function_name: Option<String>,
     /// Analysis depth
     pub depth: u32,
@@ -79,7 +77,7 @@ pub struct AnalysisParameters {
 }
 
 /// Analysis result
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct AnalysisResult {
     /// Analysis ID
     pub analysis_id: String,
@@ -87,35 +85,35 @@ pub struct AnalysisResult {
     pub contract_address: Address,
     /// Analysis status
     pub status: AnalysisStatus,
-    /// Results
+    /// Analysis results
     pub results: AnalysisResults,
-    /// Execution time (ms)
+    /// Execution time in milliseconds
     pub execution_time_ms: u64,
     /// Timestamp
     pub timestamp: u64,
 }
 
 /// Analysis status
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum AnalysisStatus {
-    /// Analysis completed successfully
-    Completed,
-    /// Analysis failed
-    Failed,
-    /// Analysis in progress
+    /// Pending
+    Pending,
+    /// In progress
     InProgress,
-    /// Analysis timed out
-    Timeout,
+    /// Completed
+    Completed,
+    /// Failed
+    Failed,
 }
 
-/// Detailed analysis results
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Analysis results
+#[derive(Debug, Clone)]
 pub struct AnalysisResults {
-    /// DeFi features found
+    /// DeFi features
     pub defi_features: DeFiFeatures,
-    /// Inconsistencies detected
+    /// Inconsistencies
     pub inconsistencies: Vec<Inconsistency>,
-    /// Potential arbitrage opportunities
+    /// Arbitrage opportunities
     pub arbitrage_opportunities: Vec<ArbitrageOpportunity>,
     /// Risk assessment
     pub risk_assessment: RiskAssessment,
@@ -123,14 +121,14 @@ pub struct AnalysisResults {
     pub recommendations: Vec<String>,
 }
 
-/// DeFi features extracted
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// DeFi features
+#[derive(Debug, Clone)]
 pub struct DeFiFeatures {
-    /// Balance changes detected
+    /// Balance changes
     pub balance_changes: u32,
-    /// Conditional constraints found
+    /// Conditional constraints
     pub conditional_constraints: u32,
-    /// ETH transfers detected
+    /// ETH transfers
     pub eth_transfers: u32,
     /// Token operations
     pub token_operations: u32,
@@ -138,8 +136,8 @@ pub struct DeFiFeatures {
     pub liquidity_operations: u32,
 }
 
-/// Inconsistency found
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Inconsistency
+#[derive(Debug, Clone)]
 pub struct Inconsistency {
     /// Inconsistency type
     pub inconsistency_type: InconsistencyType,
@@ -147,29 +145,27 @@ pub struct Inconsistency {
     pub description: String,
     /// Severity level
     pub severity: SeverityLevel,
-    /// Location in code
+    /// Location
     pub location: Option<String>,
     /// Suggested fix
     pub suggested_fix: Option<String>,
 }
 
-/// Types of inconsistencies
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Inconsistency types
+#[derive(Debug, Clone)]
 pub enum InconsistencyType {
-    /// Documentation mismatch
-    DocumentationMismatch,
-    /// Logic error
-    LogicError,
-    /// Security vulnerability
-    SecurityVulnerability,
     /// Gas optimization issue
     GasOptimizationIssue,
+    /// Logic inconsistency
+    LogicInconsistency,
     /// State inconsistency
     StateInconsistency,
+    /// Documentation mismatch
+    DocumentationMismatch,
 }
 
 /// Severity levels
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum SeverityLevel {
     /// Low severity
     Low,
@@ -182,7 +178,7 @@ pub enum SeverityLevel {
 }
 
 /// Arbitrage opportunity
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ArbitrageOpportunity {
     /// Opportunity ID
     pub opportunity_id: String,
@@ -199,7 +195,7 @@ pub struct ArbitrageOpportunity {
 }
 
 /// Risk levels
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum RiskLevel {
     /// Low risk
     Low,
@@ -210,7 +206,7 @@ pub enum RiskLevel {
 }
 
 /// Risk assessment
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RiskAssessment {
     /// Overall risk score (0-100)
     pub overall_risk_score: u8,
@@ -221,7 +217,7 @@ pub struct RiskAssessment {
 }
 
 /// Risk factor
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RiskFactor {
     /// Factor name
     pub factor_name: String,
