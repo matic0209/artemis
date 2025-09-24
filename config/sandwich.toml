@@ -1,0 +1,175 @@
+# 🥪 Sandwich 策略配置 - 本地 reth 节点版本
+
+[general]
+# 搜索者地址 (你的钱包地址)
+searcher_address = "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6"
+
+# 最小利润阈值 (wei) - 0.001 ETH
+min_profit_threshold = "1000000000000000"
+
+# 最大 gas 价格 (wei) - 100 gwei
+max_gas_price = "100000000000"
+
+# WETH 合约地址 (主网)
+weth_address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+
+# 最小利润率 (百分比)
+min_profit_percentage = 0.5
+
+# 最大滑点容忍度 (百分比)
+max_slippage_tolerance = 0.1
+
+[rpc]
+# 本地 reth 节点
+mainnet_url = "http://localhost:8545"
+ws_url = "ws://localhost:8545"
+
+# 备用 RPC (可选)
+backup_url = "https://eth-mainnet.alchemyapi.io/v2/your-alchemy-key"
+
+# RPC 配置
+timeout_seconds = 30
+max_retries = 3
+retry_delay_ms = 1000
+
+[execution]
+# Flashbots 中继 URL
+flashbots_url = "https://relay.flashbots.net"
+
+# RBuilder URL
+rbuilder_url = "https://api.rbuilder.xyz"
+
+# MEV-Share URL
+mev_share_url = "https://mev-share.flashbots.net"
+
+# 执行策略
+primary_executor = "flashbots"
+fallback_executors = ["rbuilder", "mev_share"]
+
+# Bundle 配置
+max_bundle_size = 10
+bundle_timeout_seconds = 300
+
+[gas]
+# Gas 策略
+base_gas_price_multiplier = 1.1
+priority_fee_multiplier = 1.2
+max_gas_per_bundle = 1000000
+gas_limit_buffer = 50000
+
+# 动态 Gas 价格
+enable_dynamic_gas = true
+gas_price_update_interval_seconds = 10
+
+[risk]
+# 风险控制
+max_position_size = "10000000000000000000"  # 10 ETH
+max_daily_loss = "5000000000000000000"      # 5 ETH
+max_concurrent_bundles = 3
+
+# 止损配置
+enable_stop_loss = true
+stop_loss_percentage = 5.0
+
+# 风险监控
+risk_check_interval_seconds = 60
+max_failure_rate = 0.3
+
+[pools]
+# 支持的池子类型
+supported_pools = ["uniswap_v2", "sushiswap"]
+
+# 池子发现配置
+auto_discover_pools = true
+pool_discovery_interval_seconds = 3600
+min_pool_liquidity = "100000000000000000000"  # 100 ETH
+
+# 自定义池子列表
+custom_pools = [
+    # "0x...",  # 添加自定义池子地址
+]
+
+[routers]
+# 支持的路由器
+supported_routers = [
+    "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",  # Uniswap V2
+    "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",  # SushiSwap
+]
+
+[monitoring]
+# 监控配置
+enable_metrics = true
+metrics_port = 8080
+metrics_path = "/metrics"
+
+# 日志配置
+log_level = "info"
+log_format = "json"
+log_file = "sandwich.log"
+
+# 健康检查
+enable_health_check = true
+health_check_port = 8081
+health_check_interval_seconds = 30
+
+# 告警配置
+enable_alerts = true
+alert_webhook_url = ""
+
+[simulation]
+# REVM 模拟配置
+enable_revm_simulation = true
+simulation_timeout_ms = 5000
+max_simulation_retries = 3
+
+# 状态同步配置
+state_sync_interval_seconds = 10
+state_cache_size = 10000
+
+# 模拟精度
+simulation_precision = "high"
+enable_gas_estimation = true
+
+[performance]
+# 性能优化
+enable_simd = true
+enable_memory_pool = true
+enable_zero_copy = true
+
+# 并发配置
+max_concurrent_queries = 50
+batch_size = 10
+processing_timeout_ms = 100
+
+# 缓存配置
+cache_ttl_seconds = 300
+max_cache_size = 100000
+
+[security]
+# 安全配置
+enable_rate_limiting = true
+max_requests_per_second = 100
+enable_request_signature = false
+
+# 私钥管理
+private_key_source = "env"
+private_key_env_var = "SANDWICH_PRIVATE_KEY"
+
+# 访问控制
+allowed_ips = []
+enable_api_auth = false
+
+[development]
+# 开发模式配置
+debug_mode = false
+enable_tracing = false
+tracing_level = "info"
+
+# 测试配置
+test_mode = false
+test_network = "mainnet"
+mock_external_services = false
+
+# 性能分析
+enable_profiling = false
+profiling_output = "profile.json"

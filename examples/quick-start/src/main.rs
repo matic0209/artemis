@@ -187,7 +187,7 @@ async fn run_optimized_artemis(args: Args) -> Result<()> {
 async fn run_performance_test(args: &Args) -> Result<()> {
     use artemis_core::benchmarks::PerformanceBenchmark;
     
-    println!("🎯 Artemis 性能基准测试");
+    tracing::info!("🎯 Artemis 性能基准测试");
     
     // 创建测试用 Provider
     let wallet: LocalWallet = helpers::parse_local_wallet(&args.private_key)?;
@@ -202,20 +202,20 @@ async fn run_performance_test(args: &Args) -> Result<()> {
     let root_provider = Arc::new(helpers::create_ws_provider(&args.wss).await?);
     let benchmark = PerformanceBenchmark::new(root_provider, 1000);
     
-    println!("📊 测试 RPC 性能...");
+    tracing::info!("📊 测试 RPC 性能...");
     let rpc_latency = benchmark.benchmark_rpc_calls().await?;
     
-    println!("🔥 测试引擎性能...");
+    tracing::info!("🔥 测试引擎性能...");
     let results = benchmark.run_comparison().await?;
     
     // 显示结果
     benchmark.print_report(&results);
     
-    println!("\n🌐 RPC 性能: {:.2}ms (10 并发调用)", rpc_latency.as_millis());
+    tracing::info!("\n🌐 RPC 性能: {:.2}ms (10 并发调用)", rpc_latency.as_millis());
     
     if results.improvement_percentage > 30.0 {
-        println!("\n🎉 建议：启用优化功能获得更好性能！");
-        println!("使用: --enable-rbuilder 启用高级优化");
+        tracing::info!("\n🎉 建议：启用优化功能获得更好性能！");
+        tracing::info!("使用: --enable-rbuilder 启用高级优化");
     }
     
     Ok(())

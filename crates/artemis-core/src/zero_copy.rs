@@ -93,34 +93,34 @@ pub struct ZeroCopySerializer;
 
 impl ZeroCopySerializer {
     /// 序列化事件
-    pub fn serialize_event(event: &ZeroCopyEvent) -> Result<AlignedVec, rkyv::ser::serializers::AllocSerializeError> {
+    pub fn serialize_event(event: &ZeroCopyEvent) -> Result<AlignedVec, rkyv::ser::serializers::AllocSerializer<256>> {
         to_bytes::<_, 256>(event)
     }
 
     /// 反序列化事件
     pub fn deserialize_event(bytes: &[u8]) -> Result<&ArchivedZeroCopyEvent, Box<dyn std::error::Error>> {
-        Ok(archived_root::<ZeroCopyEvent>(bytes)?)
+        unsafe { Ok(archived_root::<ZeroCopyEvent>(bytes)) }
     }
 
     /// 序列化动作
-    pub fn serialize_action(action: &ZeroCopyAction) -> Result<AlignedVec, rkyv::ser::serializers::AllocSerializeError> {
+    pub fn serialize_action(action: &ZeroCopyAction) -> Result<AlignedVec, rkyv::ser::serializers::AllocSerializer<256>> {
         to_bytes::<_, 256>(action)
     }
 
     /// 反序列化动作
     pub fn deserialize_action(bytes: &[u8]) -> Result<&ArchivedZeroCopyAction, Box<dyn std::error::Error>> {
-        Ok(archived_root::<ZeroCopyAction>(bytes)?)
+        unsafe { Ok(archived_root::<ZeroCopyAction>(bytes)) }
     }
 
     /// 批量序列化事件
-    pub fn serialize_events_batch(events: &[ZeroCopyEvent]) -> Result<Vec<AlignedVec>, rkyv::ser::serializers::AllocSerializeError> {
+    pub fn serialize_events_batch(events: &[ZeroCopyEvent]) -> Result<Vec<AlignedVec>, rkyv::ser::serializers::AllocSerializer<256>> {
         events.iter().map(Self::serialize_event).collect()
     }
 
     /// 批量反序列化事件
-    pub fn deserialize_events_batch(
-        serialized_events: &[&[u8]]
-    ) -> Result<Vec<&ArchivedZeroCopyEvent>, Box<dyn std::error::Error>> {
+    pub fn deserialize_events_batch<'a>(
+        serialized_events: &'a [&'a [u8]]
+    ) -> Result<Vec<&'a ArchivedZeroCopyEvent>, Box<dyn std::error::Error>> {
         serialized_events
             .iter()
             .map(|bytes| Self::deserialize_event(bytes))
@@ -260,13 +260,14 @@ impl TypeConverter {
     /// U256 到字节数组
     pub fn u256_to_bytes(value: U256) -> [u8; 32] {
         let mut bytes = [0u8; 32];
-        value.to_big_endian(&mut bytes);
+        let bytes_array = value.to_be_bytes::<32>();
+        bytes.copy_from_slice(&bytes_array);
         bytes
     }
 
     /// 字节数组到 U256
     pub fn bytes_to_u256(bytes: [u8; 32]) -> U256 {
-        U256::from_big_endian(&bytes)
+        U256::from_be_slice(&bytes)
     }
 
     /// 转换标准事件到零拷贝事件

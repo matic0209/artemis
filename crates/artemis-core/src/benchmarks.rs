@@ -133,7 +133,7 @@ impl PerformanceBenchmark {
         let throughput = total_events as f64 / elapsed.as_secs_f64();
         let memory_usage = self.estimate_memory_usage() * 4 / 10; // 60% 减少
         
-        println!("✅ 优化性能: {:.2}ms, {:.1} events/s", elapsed.as_millis(), throughput);
+        tracing::info!("✅ 优化性能: {:.2}ms, {:.1} events/s", elapsed.as_millis(), throughput);
         
         Ok((elapsed, throughput, memory_usage))
     }
@@ -145,7 +145,7 @@ impl PerformanceBenchmark {
 
     /// Benchmark RPC call performance
     pub async fn benchmark_rpc_calls(&self) -> Result<Duration> {
-        println!("🌐 Benchmarking RPC Performance...");
+        tracing::info!("🌐 Benchmarking RPC Performance...");
         
         let start = Instant::now();
         
@@ -166,57 +166,57 @@ impl PerformanceBenchmark {
         }
         
         let elapsed = start.elapsed();
-        println!("✅ RPC Calls: {:.2}ms for 10 concurrent calls", elapsed.as_millis());
+        tracing::info!("✅ RPC Calls: {:.2}ms for 10 concurrent calls", elapsed.as_millis());
         
         Ok(elapsed)
     }
 
     /// Print comprehensive benchmark report
     pub fn print_report(&self, results: &BenchmarkResults) {
-        println!("\n🎯 === ARTEMIS PERFORMANCE BENCHMARK REPORT ===");
-        println!("┌─────────────────────────────────────────────────┐");
-        println!("│                 延迟对比 LATENCY                │");
-        println!("├─────────────────────────────────────────────────┤");
-        println!("│ 基线版本: {:>13.2} ms                    │", results.engine_v1_latency.as_millis());
-        println!("│ 优化版本: {:>13.2} ms                    │", results.engine_v2_latency.as_millis());
-        println!("│ 性能提升: {:>13.1}%                      │", results.improvement_percentage);
-        println!("├─────────────────────────────────────────────────┤");
-        println!("│                吞吐量对比 THROUGHPUT            │");
-        println!("├─────────────────────────────────────────────────┤");
-        println!("│ 基线吞吐: {:>13.1} events/s              │", results.throughput_v1);
-        println!("│ 优化吞吐: {:>13.1} events/s              │", results.throughput_v2);
-        println!("│ 速度提升: {:>17.1}x                     │", results.throughput_v2 / results.throughput_v1.max(1.0));
-        println!("├─────────────────────────────────────────────────┤");
-        println!("│                内存使用 MEMORY                  │");
-        println!("├─────────────────────────────────────────────────┤");
-        println!("│ 基线内存: {:>12} bytes                    │", results.memory_usage_v1);
-        println!("│ 优化内存: {:>12} bytes                    │", results.memory_usage_v2);
-        println!("│ 内存减少: {:>12.1}%                      │", 
+        tracing::info!("\n🎯 === ARTEMIS PERFORMANCE BENCHMARK REPORT ===");
+        tracing::info!("┌─────────────────────────────────────────────────┐");
+        tracing::info!("│                 延迟对比 LATENCY                │");
+        tracing::info!("├─────────────────────────────────────────────────┤");
+        tracing::info!("│ 基线版本: {:>13.2} ms                    │", results.engine_v1_latency.as_millis());
+        tracing::info!("│ 优化版本: {:>13.2} ms                    │", results.engine_v2_latency.as_millis());
+        tracing::info!("│ 性能提升: {:>13.1}%                      │", results.improvement_percentage);
+        tracing::info!("├─────────────────────────────────────────────────┤");
+        tracing::info!("│                吞吐量对比 THROUGHPUT            │");
+        tracing::info!("├─────────────────────────────────────────────────┤");
+        tracing::info!("│ 基线吞吐: {:>13.1} events/s              │", results.throughput_v1);
+        tracing::info!("│ 优化吞吐: {:>13.1} events/s              │", results.throughput_v2);
+        tracing::info!("│ 速度提升: {:>17.1}x                     │", results.throughput_v2 / results.throughput_v1.max(1.0));
+        tracing::info!("├─────────────────────────────────────────────────┤");
+        tracing::info!("│                内存使用 MEMORY                  │");
+        tracing::info!("├─────────────────────────────────────────────────┤");
+        tracing::info!("│ 基线内存: {:>12} bytes                    │", results.memory_usage_v1);
+        tracing::info!("│ 优化内存: {:>12} bytes                    │", results.memory_usage_v2);
+        tracing::info!("│ 内存减少: {:>12.1}%                      │", 
             (1.0 - results.memory_usage_v2 as f64 / results.memory_usage_v1.max(1) as f64) * 100.0);
-        println!("└─────────────────────────────────────────────────┘");
+        tracing::info!("└─────────────────────────────────────────────────┘");
         
         // Performance recommendations
-        println!("\n💡 OPTIMIZATION RECOMMENDATIONS:");
+        tracing::info!("\n💡 OPTIMIZATION RECOMMENDATIONS:");
         if results.improvement_percentage > 50.0 {
-            println!("🎉 Excellent! Engine V2 shows significant improvement");
+            tracing::info!("🎉 Excellent! Engine V2 shows significant improvement");
         } else if results.improvement_percentage > 20.0 {
-            println!("✅ Good improvement, consider enabling Engine V2");
+            tracing::info!("✅ Good improvement, consider enabling Engine V2");
         } else {
-            println!("⚠️  Marginal improvement, may need further tuning");
+            tracing::info!("⚠️  Marginal improvement, may need further tuning");
         }
         
         if results.throughput_v2 > results.throughput_v1 * 2.0 {
-            println!("🚀 Throughput more than doubled - highly recommended");
+            tracing::info!("🚀 Throughput more than doubled - highly recommended");
         }
         
-        println!("\n🔧 SUGGESTED CLI FLAGS FOR OPTIMAL PERFORMANCE:");
-        println!("cargo run --features rbuilder-integration -- \\");
-        println!("  --enable-rbuilder \\");
-        println!("  --rbuilder-algorithm max-profit \\");
-        println!("  --block-buffer-size {} \\", 
+        tracing::info!("\n🔧 SUGGESTED CLI FLAGS FOR OPTIMAL PERFORMANCE:");
+        tracing::info!("cargo run --features rbuilder-integration -- \\");
+        tracing::info!("  --enable-rbuilder \\");
+        tracing::info!("  --rbuilder-algorithm max-profit \\");
+        tracing::info!("  --block-buffer-size {} \\", 
             if results.improvement_percentage > 30.0 { 2048 } else { 1024 });
-        println!("  --mempool-buffer-size {} \\", 
+        tracing::info!("  --mempool-buffer-size {} \\", 
             if results.improvement_percentage > 30.0 { 4096 } else { 2048 });
-        println!("  # ... your other parameters");
+        tracing::info!("  # ... your other parameters");
     }
 }

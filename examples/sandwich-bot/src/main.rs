@@ -209,7 +209,7 @@ async fn run_sandwich_bot(args: Args) -> Result<()> {
 async fn run_benchmark(args: &Args) -> Result<()> {
     use artemis_core::benchmarks::PerformanceBenchmark;
     
-    println!("🎯 Sandwich 策略性能基准测试");
+    tracing::info!("🎯 Sandwich 策略性能基准测试");
     
     // 创建测试用 Provider
     let wallet: LocalWallet = helpers::parse_local_wallet(&args.private_key)?;
@@ -223,26 +223,26 @@ async fn run_benchmark(args: &Args) -> Result<()> {
     // 运行基准测试
     let benchmark = PerformanceBenchmark::new(root_provider, 1000);
     
-    println!("📊 测试 RPC 性能...");
+    tracing::info!("📊 测试 RPC 性能...");
     let rpc_latency = benchmark.benchmark_rpc_calls().await?;
     
-    println!("🔥 测试策略性能...");
+    tracing::info!("🔥 测试策略性能...");
     let results = benchmark.run_comparison().await?;
     
     // 显示结果
     benchmark.print_report(&results);
     
-    println!("\n🌐 RPC 性能: {:.2}ms (10 并发调用)", rpc_latency.as_millis());
+    tracing::info!("\n🌐 RPC 性能: {:.2}ms (10 并发调用)", rpc_latency.as_millis());
     
-    println!("\n🥪 SANDWICH 策略特定优化:");
-    println!("   - 智能交易过滤: 减少 90%+ 无关交易处理");
-    println!("   - 并行机会检测: 4-8x 机会识别速度");
-    println!("   - 本地模拟优化: 减少 80% 模拟时间");
-    println!("   - rbuilder 集成: 提升 15-30% Bundle 成功率");
+    tracing::info!("\n🥪 SANDWICH 策略特定优化:");
+    tracing::info!("   - 智能交易过滤: 减少 90%+ 无关交易处理");
+    tracing::info!("   - 并行机会检测: 4-8x 机会识别速度");
+    tracing::info!("   - 本地模拟优化: 减少 80% 模拟时间");
+    tracing::info!("   - rbuilder 集成: 提升 15-30% Bundle 成功率");
     
     if results.improvement_percentage > 30.0 {
-        println!("\n🎉 建议：启用所有优化功能获得最佳性能！");
-        println!("使用: --enable-rbuilder --enable-multi-meat");
+        tracing::info!("\n🎉 建议：启用所有优化功能获得最佳性能！");
+        tracing::info!("使用: --enable-rbuilder --enable-multi-meat");
     }
     
     Ok(())

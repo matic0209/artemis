@@ -201,7 +201,7 @@ impl SimdCalculator {
     pub fn u256_to_f64_batch(values: &[U256]) -> Vec<f64> {
         values
             .iter()
-            .map(|v| v.as_u128() as f64)
+            .map(|v| v.to::<u128>() as f64)
             .collect()
     }
 

@@ -124,7 +124,7 @@ fn format_code<P: AsRef<Path>>(crate_name: P) -> Result<(), Error> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("rustfmt error:\n{}", stderr);
+        tracing::error!("rustfmt error:\n{}", stderr);
     }
 
     Ok(())

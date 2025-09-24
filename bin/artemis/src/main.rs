@@ -191,8 +191,8 @@ async fn run_cli(args: Args) -> Result<()> {
 async fn run_benchmark(args: Args) -> Result<()> {
     use artemis_core::benchmarks::PerformanceBenchmark;
     
-    println!("🚀 Artemis Performance Benchmark Mode");
-    println!("Setting up provider connection...");
+    tracing::info!("🚀 Artemis Performance Benchmark Mode");
+    tracing::info!("Setting up provider connection...");
     
     // Create provider for benchmarking
     let wallet: LocalWallet = helpers::parse_local_wallet(&args.private_key)?;
@@ -207,21 +207,21 @@ async fn run_benchmark(args: Args) -> Result<()> {
     // Run benchmark
     let benchmark = PerformanceBenchmark::new(provider, args.benchmark_iterations);
     
-    println!("Running RPC performance test...");
+    tracing::info!("Running RPC performance test...");
     let rpc_latency = benchmark.benchmark_rpc_calls().await?;
     
-    println!("Running engine comparison...");
+    tracing::info!("Running engine comparison...");
     let results = benchmark.run_comparison().await?;
     
     // Print comprehensive report
     benchmark.print_report(&results);
     
-    println!("\n🌐 RPC Performance: {:.2}ms for 10 concurrent calls", rpc_latency.as_millis());
+    tracing::info!("\n🌐 RPC Performance: {:.2}ms for 10 concurrent calls", rpc_latency.as_millis());
     
     // Recommendations based on results
     if results.improvement_percentage > 30.0 {
-        println!("\n🎯 RECOMMENDATION: Enable optimizations for production use!");
-        println!("Add --features rbuilder-integration to your build command");
+        tracing::info!("\n🎯 RECOMMENDATION: Enable optimizations for production use!");
+        tracing::info!("Add --features rbuilder-integration to your build command");
     }
     
     Ok(())

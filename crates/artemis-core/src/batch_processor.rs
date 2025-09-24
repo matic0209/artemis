@@ -54,7 +54,7 @@ where
     /// 创建新的批处理器
     pub fn new(config: BatchConfig) -> Self {
         Self {
-            config,
+            config: config.clone(),
             buffer: Arc::new(Mutex::new(VecDeque::with_capacity(config.buffer_size))),
             notifier: Arc::new(Notify::new()),
             running: Arc::new(Mutex::new(false)),
@@ -185,7 +185,7 @@ impl StreamBatchProcessor {
         S: Stream<Item = T> + Send + 'static,
         T: Send + 'static,
     {
-        let buffer = Arc::new(Mutex::new(Vec::with_capacity(config.batch_size)));
+        let buffer = Arc::new(Mutex::new(Vec::<T>::with_capacity(config.batch_size)));
         let last_batch_time = Arc::new(Mutex::new(Instant::now()));
         
         stream.chunks_timeout(config.batch_size, config.batch_timeout)
@@ -398,7 +398,7 @@ mod tests {
         processor.start_adaptive(|batch| async move {
             // 模拟处理时间
             sleep(Duration::from_millis(10)).await;
-            println!("Processed batch of {} items", batch.len());
+            tracing::debug!("Processed batch of {} items", batch.len());
             Ok(())
         }).await.unwrap();
         

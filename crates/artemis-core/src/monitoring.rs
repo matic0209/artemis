@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use dashmap::DashMap;
-use metrics::{counter, gauge, histogram, register_counter, register_gauge, register_histogram};
+use metrics::{counter, gauge, histogram};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -196,13 +196,14 @@ impl MonitoringManager {
         self.strategy_metrics.insert(name.clone(), metrics.clone());
         
         // 注册 Prometheus 指标
-        register_counter!("strategy_events_processed", "strategy" => name.clone());
-        register_counter!("strategy_actions_generated", "strategy" => name.clone());
-        register_counter!("strategy_actions_executed", "strategy" => name.clone());
-        register_counter!("strategy_failures", "strategy" => name.clone());
-        register_histogram!("strategy_processing_time_ms", "strategy" => name.clone());
-        register_gauge!("strategy_success_rate", "strategy" => name.clone());
-        register_gauge!("strategy_total_profit_eth", "strategy" => name.clone());
+        // 注册指标（使用 metrics 宏）
+        counter!("strategy_events_processed", 0, "strategy" => name.clone());
+        counter!("strategy_actions_generated", 0, "strategy" => name.clone());
+        counter!("strategy_actions_executed", 0, "strategy" => name.clone());
+        counter!("strategy_failures", 0, "strategy" => name.clone());
+        histogram!("strategy_processing_time_ms", 0.0, "strategy" => name.clone());
+        gauge!("strategy_success_rate", 0.0, "strategy" => name.clone());
+        gauge!("strategy_total_profit_eth", 0.0, "strategy" => name.clone());
     }
 
     /// 更新策略指标

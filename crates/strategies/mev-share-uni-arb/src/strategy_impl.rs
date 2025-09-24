@@ -431,9 +431,30 @@ where
         current_prices: &CurrentPrices,
         predicted_prices: &PredictedPrices,
     ) -> Result<U256> {
-        // TODO: 实现详细的利润计算
-        // 考虑滑点、gas 费用、MEV 奖励等
-        Ok(amount / U256::from(100)) // 简化计算：1% 利润
+        // 计算价格差异利润
+        let price_diff = predicted_prices.v3_price.saturating_sub(current_prices.v3_price);
+        let base_profit = amount * price_diff / current_prices.v3_price;
+        
+        // 估算滑点成本 (0.3% 滑点)
+        let slippage_cost = amount * U256::from(3) / U256::from(1000);
+        
+        // 估算 gas 费用 (假设 200k gas, 50 gwei)
+        let gas_price = U256::from(50_000_000_000u64); // 50 gwei
+        let gas_limit = U256::from(200_000u64);
+        let gas_cost = gas_price * gas_limit;
+        
+        // 估算 MEV 奖励 (假设 0.1 ETH)
+        let mev_reward = U256::from(100_000_000_000_000_000u64); // 0.1 ETH
+        
+        // 计算净利润
+        let gross_profit = base_profit + mev_reward;
+        let total_costs = slippage_cost + gas_cost;
+        
+        if gross_profit > total_costs {
+            Ok(gross_profit - total_costs)
+        } else {
+            Ok(U256::ZERO)
+        }
     }
 
     /// 生成优化的 bundles
@@ -546,7 +567,19 @@ impl PricePredictor {
     }
     
     async fn initialize(&mut self) -> Result<()> {
-        // TODO: 初始化价格预测器
+        // 初始化价格预测器
+        // 加载历史价格数据
+        self.historical_prices = self.load_historical_prices().await?;
+        
+        // 初始化预测模型参数
+        self.model_params = PriceModelParams {
+            volatility_factor: 0.02, // 2% 波动率
+            trend_weight: 0.3,
+            momentum_weight: 0.4,
+            mean_reversion_weight: 0.3,
+        };
+        
+        tracing::info!("价格预测器初始化完成");
         Ok(())
     }
     
@@ -556,11 +589,37 @@ impl PricePredictor {
         current_prices: &CurrentPrices,
         window: u64,
     ) -> Result<PredictedPrices> {
-        // TODO: 实现价格预测逻辑
+        // 实现价格预测逻辑
+        let historical = self.historical_prices.get(&pool_address)
+            .ok_or_else(|| anyhow::anyhow!("No historical data for pool"))?;
+        
+        // 计算趋势
+        let trend = self.calculate_trend(historical, window)?;
+        
+        // 计算动量
+        let momentum = self.calculate_momentum(historical, window)?;
+        
+        // 计算均值回归
+        let mean_reversion = self.calculate_mean_reversion(historical, window)?;
+        
+        // 组合预测
+        let v3_prediction = current_prices.v3_price * (U256::from(1) + 
+            (trend * self.model_params.trend_weight + 
+             momentum * self.model_params.momentum_weight + 
+             mean_reversion * self.model_params.mean_reversion_weight) / U256::from(100));
+        
+        let v2_prediction = current_prices.v2_price * (U256::from(1) + 
+            (trend * self.model_params.trend_weight + 
+             momentum * self.model_params.momentum_weight + 
+             mean_reversion * self.model_params.mean_reversion_weight) / U256::from(100));
+        
+        // 计算置信度
+        let confidence = self.calculate_confidence(historical, window)?;
+        
         Ok(PredictedPrices {
-            v3_price: current_prices.v3_price,
-            v2_price: current_prices.v2_price,
-            confidence: 0.8,
+            v3_price: v3_prediction,
+            v2_price: v2_prediction,
+            confidence,
         })
     }
 }
@@ -575,7 +634,15 @@ impl RiskAssessor {
     }
     
     async fn initialize(&mut self) -> Result<()> {
-        // TODO: 初始化风险评估器
+        // 初始化风险评估器
+        self.risk_params = RiskParams {
+            max_volatility: 0.05, // 5% 最大波动率
+            min_liquidity: U256::from(1000) * U256::from(10).pow(U256::from(18)), // 1000 ETH
+            max_slippage: 0.01, // 1% 最大滑点
+            correlation_threshold: 0.8,
+        };
+        
+        tracing::info!("风险评估器初始化完成");
         Ok(())
     }
     
@@ -584,12 +651,33 @@ impl RiskAssessor {
         pool_address: Address,
         predicted_prices: &PredictedPrices,
     ) -> Result<RiskMetrics> {
-        // TODO: 实现风险评估逻辑
+        // 实现风险评估逻辑
+        let historical = self.risk_history.get(&pool_address)
+            .ok_or_else(|| anyhow::anyhow!("No risk history for pool"))?;
+        
+        // 计算波动率
+        let volatility = self.calculate_volatility(historical)?;
+        
+        // 计算流动性评分
+        let liquidity_score = self.calculate_liquidity_score(pool_address).await?;
+        
+        // 计算竞争评分
+        let competition_score = self.calculate_competition_score(pool_address).await?;
+        
+        // 计算相关性风险
+        let correlation_risk = self.calculate_correlation_risk(pool_address).await?;
+        
+        // 综合风险评估
+        let overall_risk = (volatility * 0.4 + 
+                           (1.0 - liquidity_score) * 0.3 + 
+                           competition_score * 0.2 + 
+                           correlation_risk * 0.1).min(1.0);
+        
         Ok(RiskMetrics {
-            volatility: 0.3,
-            liquidity_score: 0.8,
-            competition_score: 0.4,
-            overall_risk: 0.5,
+            volatility,
+            liquidity_score,
+            competition_score,
+            overall_risk,
         })
     }
 }
