@@ -18,6 +18,7 @@ pub mod evm_interpreter_complete;
 pub mod abi_parser_complete;
 pub mod defi_feature_extractor_complete;
 pub mod path_explorer_complete;
+pub mod tests;
 
 // Re-export main components
 pub use strategy::DeFiAnalyzerStrategy;

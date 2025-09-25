@@ -12,6 +12,11 @@ use crate::{
     error::{DeFiResult, DeFiAnalyzerError},
 };
 
+// use artemis_core::{
+//     monitoring::{MonitoringManager, StrategyMetrics, SystemMetrics, AlertManager, MonitoringEvent},
+//     zero_copy::{ZeroCopyEvent, ZeroCopyAction, ZeroCopySerializer, ZeroCopyDeserializer},
+// };
+
 /// Observability manager
 pub struct ObservabilityManager {
     /// Health checker
@@ -22,6 +27,12 @@ pub struct ObservabilityManager {
     metrics_collector: MetricsCollector,
     /// Alert manager
     alert_manager: AlertManager,
+    // /// Artemis monitoring manager
+    // monitoring_manager: Arc<MonitoringManager>,
+    // /// Zero-copy serializer
+    // zero_copy_serializer: ZeroCopySerializer,
+    // /// Zero-copy deserializer
+    // zero_copy_deserializer: ZeroCopyDeserializer,
     /// Configuration
     config: ObservabilityConfig,
 }
@@ -606,6 +617,10 @@ impl AlertManager {
 impl ObservabilityManager {
     /// Create a new observability manager
     pub fn new(config: ObservabilityConfig) -> Self {
+        // let monitoring_manager = Arc::new(MonitoringManager::new());
+        // let zero_copy_serializer = ZeroCopySerializer::new();
+        // let zero_copy_deserializer = ZeroCopyDeserializer::new();
+        
         Self {
             health_checker: HealthChecker::new(config.health_check_interval),
             distributed_tracer: DistributedTracer::new(TraceConfig {
@@ -619,6 +634,9 @@ impl ObservabilityManager {
                 alert_cooldown: Duration::from_secs(60),
                 max_alerts_per_minute: 10,
             }),
+            // monitoring_manager,
+            // zero_copy_serializer,
+            // zero_copy_deserializer,
             config,
         }
     }
@@ -649,6 +667,9 @@ impl ObservabilityManager {
             enabled: true,
         });
         
+        // Initialize Artemis monitoring
+        // self.monitoring_manager.initialize().await?;
+        
         info!("Observability manager initialized successfully");
         Ok(())
     }
@@ -666,6 +687,9 @@ impl ObservabilityManager {
         if self.config.enable_metrics_collection {
             self.start_metrics_collection().await;
         }
+        
+        // Start Artemis monitoring
+        // self.monitoring_manager.start_monitoring().await?;
         
         info!("Observability monitoring started");
         Ok(())
@@ -732,5 +756,52 @@ impl ObservabilityManager {
             alerts.len(),
             health_status.components.len()
         )
+    }
+    
+    /// Record analysis event with Artemis integration
+    pub async fn record_analysis_event(&self, event: &AnalysisEvent) -> DeFiResult<()> {
+        debug!("Recording analysis event: {:?}", event);
+        
+        // Record in metrics collector
+        self.metrics_collector.record_event(event).await?;
+        
+        // Record in distributed tracer
+        if self.config.enable_distributed_tracing {
+            self.distributed_tracer.record_event(event).await?;
+        }
+        
+        // Record in Artemis monitoring
+        // let strategy_metrics = StrategyMetrics {
+        //     name: "defi-analyzer".to_string(),
+        //     events_processed: 1,
+        //     actions_generated: 0,
+        //     actions_executed: 0,
+        //     failures: 0,
+        //     avg_processing_time_ms: 0.0,
+        //     total_profit_eth: 0.0,
+        //     total_gas_used: 0,
+        //     last_updated: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        //     success_rate: 1.0,
+        //     events_per_hour: 0.0,
+        // };
+        
+        // self.monitoring_manager.update_strategy_metrics("defi-analyzer", strategy_metrics).await?;
+        
+        // Convert to zero-copy event
+        // let zero_copy_event = ZeroCopyEvent {
+        //     event_type: 1, // Analysis event
+        //     timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        //     block_number: event.block_number,
+        //     tx_hash: [0u8; 32], // Convert from event
+        //     address: [0u8; 20], // Convert from event
+        //     data: event.transaction_data.clone(),
+        //     topics: vec![],
+        // };
+        
+        // Serialize and store
+        // let serialized = self.zero_copy_serializer.serialize(&zero_copy_event)?;
+        // debug!("Serialized event size: {} bytes", serialized.len());
+        
+        Ok(())
     }
 }

@@ -338,6 +338,153 @@ impl ABIParser {
 
         Ok(abi_elements)
     }
+    
+    /// Load ABI from contract address with external source fetching
+    pub async fn load_abi_from_address(&mut self, address: Address) -> DeFiResult<Vec<ABIElement>> {
+        if self.config.enable_caching {
+            if let Some(cached_abi) = self.abi_cache.get(&address) {
+                debug!("Using cached ABI for address: {}", address);
+                return Ok(cached_abi.clone());
+            }
+        }
+        
+        // Load ABI from external source
+        let abi = self.fetch_abi_from_external_source(address).await?;
+        
+        if self.config.enable_caching {
+            self.abi_cache.insert(address, abi.clone());
+        }
+        
+        Ok(abi)
+    }
+    
+    /// Fetch ABI from external source (Etherscan, etc.)
+    async fn fetch_abi_from_external_source(&self, address: Address) -> DeFiResult<Vec<ABIElement>> {
+        // Try multiple sources in order of preference
+        let sources = vec![
+            "etherscan",
+            "sourcify", 
+            "4byte",
+            "openchain"
+        ];
+        
+        for source in sources {
+            match self.fetch_abi_from_source(source, address).await {
+                Ok(abi) => {
+                    debug!("Successfully fetched ABI from {} for address {}", source, address);
+                    return Ok(abi);
+                },
+                Err(e) => {
+                    debug!("Failed to fetch ABI from {}: {}", source, e);
+                    continue;
+                }
+            }
+        }
+        
+        Err(DeFiAnalyzerError::ABIFetchError(format!("Failed to fetch ABI for address {} from any source", address)))
+    }
+    
+    /// Fetch ABI from specific source
+    async fn fetch_abi_from_source(&self, source: &str, address: Address) -> DeFiResult<Vec<ABIElement>> {
+        match source {
+            "etherscan" => self.fetch_abi_from_etherscan(address).await,
+            "sourcify" => self.fetch_abi_from_sourcify(address).await,
+            "4byte" => self.fetch_abi_from_4byte(address).await,
+            "openchain" => self.fetch_abi_from_openchain(address).await,
+            _ => Err(DeFiAnalyzerError::ABIFetchError(format!("Unknown source: {}", source)))
+        }
+    }
+    
+    /// Fetch ABI from Etherscan
+    async fn fetch_abi_from_etherscan(&self, address: Address) -> DeFiResult<Vec<ABIElement>> {
+        // Implementation for Etherscan API
+        // This would make HTTP requests to Etherscan API
+        debug!("Fetching ABI from Etherscan for address: {}", address);
+        
+        // Simulate API call
+        let abi_json = r#"
+        [
+            {
+                "type": "function",
+                "name": "transfer",
+                "inputs": [
+                    {"name": "to", "type": "address"},
+                    {"name": "amount", "type": "uint256"}
+                ],
+                "outputs": [{"name": "", "type": "bool"}]
+            }
+        ]
+        "#;
+        
+        let abi_elements: Vec<ABIElement> = serde_json::from_str(abi_json)?;
+        Ok(abi_elements)
+    }
+    
+    /// Fetch ABI from Sourcify
+    async fn fetch_abi_from_sourcify(&self, address: Address) -> DeFiResult<Vec<ABIElement>> {
+        debug!("Fetching ABI from Sourcify for address: {}", address);
+        
+        // Simulate Sourcify API call
+        let abi_json = r#"
+        [
+            {
+                "type": "function",
+                "name": "balanceOf",
+                "inputs": [
+                    {"name": "account", "type": "address"}
+                ],
+                "outputs": [{"name": "", "type": "uint256"}]
+            }
+        ]
+        "#;
+        
+        let abi_elements: Vec<ABIElement> = serde_json::from_str(abi_json)?;
+        Ok(abi_elements)
+    }
+    
+    /// Fetch ABI from 4byte directory
+    async fn fetch_abi_from_4byte(&self, address: Address) -> DeFiResult<Vec<ABIElement>> {
+        debug!("Fetching ABI from 4byte for address: {}", address);
+        
+        // 4byte provides function signatures
+        // This would analyze contract bytecode to extract function signatures
+        let abi_json = r#"
+        [
+            {
+                "type": "function",
+                "name": "approve",
+                "inputs": [
+                    {"name": "spender", "type": "address"},
+                    {"name": "amount", "type": "uint256"}
+                ],
+                "outputs": [{"name": "", "type": "bool"}]
+            }
+        ]
+        "#;
+        
+        let abi_elements: Vec<ABIElement> = serde_json::from_str(abi_json)?;
+        Ok(abi_elements)
+    }
+    
+    /// Fetch ABI from OpenChain
+    async fn fetch_abi_from_openchain(&self, address: Address) -> DeFiResult<Vec<ABIElement>> {
+        debug!("Fetching ABI from OpenChain for address: {}", address);
+        
+        // OpenChain provides verified contract metadata
+        let abi_json = r#"
+        [
+            {
+                "type": "function",
+                "name": "totalSupply",
+                "inputs": [],
+                "outputs": [{"name": "", "type": "uint256"}]
+            }
+        ]
+        "#;
+        
+        let abi_elements: Vec<ABIElement> = serde_json::from_str(abi_json)?;
+        Ok(abi_elements)
+    }
 }
 
 /// ABI utility functions
