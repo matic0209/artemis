@@ -9,13 +9,13 @@ use std::time::{Instant, Duration};
 use alloy_primitives::{Address, U256, Bytes};
 use tracing::{info, debug, warn, error};
 use anyhow::{Result, Context};
-use revm::{
-    primitives::{
-        ExecutionResult, Output, TransactTo, TxEnv, BlockEnv, SpecId,
-        AccountInfo, Bytecode, B256, KECCAK_EMPTY,
-    },
-    Database, DatabaseCommit, EVM,
-};
+// use revm::{
+//     primitives::{
+//         ExecutionResult, Output, TransactTo, TxEnv, BlockEnv, SpecId,
+//         AccountInfo, Bytecode, B256, KECCAK_EMPTY,
+//     },
+//     Database, DatabaseCommit, EVM,
+// };
 
 use crate::{
     types::{AnalysisEvent, AnalysisAction, ActionType, RiskLevel},
@@ -44,8 +44,8 @@ pub struct JITStrategyDiscoveryEngine {
     candidates: Vec<StrategyCandidate>,
     /// Base asset for all strategies
     base_asset: String,
-    /// REVM instance for concrete simulation
-    evm: Option<EVM<ChainStateDB>>,
+    /// Mock EVM simulation results
+    simulation_cache: HashMap<String, U256>,
 }
 
 /// JIT Strategy Discovery Configuration
@@ -116,14 +116,14 @@ pub struct StateHistory {
     max_entries: usize,
 }
 
-/// Chain state database for REVM
+/// Mock chain state database (REVM replacement)
 pub struct ChainStateDB {
-    /// Account information
-    accounts: HashMap<Address, AccountInfo>,
-    /// Contract bytecode
-    contracts: HashMap<B256, Bytecode>,
-    /// Block information
-    block_hashes: HashMap<u64, B256>,
+    /// Account balances
+    balances: HashMap<Address, U256>,
+    /// Contract data
+    contracts: HashMap<Address, Vec<u8>>,
+    /// Storage data
+    storage: HashMap<(Address, U256), U256>,
 }
 
 /// DeFi action definition for path discovery
@@ -196,7 +196,7 @@ impl JITStrategyDiscoveryEngine {
             state_history,
             candidates: Vec::new(),
             base_asset: "WETH".to_string(),
-            evm: None,
+            simulation_cache: HashMap::new(),
         })
     }
 
@@ -582,54 +582,49 @@ impl JITStrategyDiscoveryEngine {
         Ok(u)
     }
 
-    /// Concrete simulation using REVM
+    /// Concrete simulation using mock EVM (REVM replacement)
     async fn concrete_simulate(&mut self, path: &[DeFiAction], s0: &StateSnapshot, z_star: U256) -> DeFiResult<U256> {
         let txs = self.materialize_tx_sequence(path, z_star, s0)?;
         
-        // Initialize REVM if not already done
-        if self.evm.is_none() {
-            self.evm = Some(self.init_revm(s0)?);
+        // Create cache key for simulation
+        let cache_key = format!("{}_{}", 
+            path.iter().map(|a| &a.id).collect::<Vec<_>>().join("_"),
+            z_star
+        );
+        
+        // Check cache first
+        if let Some(&cached_result) = self.simulation_cache.get(&cache_key) {
+            return Ok(cached_result);
         }
         
         let mut total_gas = 0u64;
-        let mut current_state = s0.clone();
         
+        // Mock transaction execution
         for tx in txs {
-            if let Some(ref mut evm) = self.evm {
-                // Set transaction environment
-                evm.env.tx = TxEnv {
-                    caller: tx.to, // Simplified
-                    transact_to: TransactTo::Call(tx.to),
-                    data: tx.data.clone(),
-                    value: tx.value,
-                    gas_limit: tx.gas_limit,
-                    gas_price: self.config.gas_price,
-                    ..Default::default()
-                };
-                
-                // Execute transaction
-                match evm.transact() {
-                    Ok(result) => {
-                        match result.result {
-                            ExecutionResult::Success { gas_used, .. } => {
-                                total_gas += gas_used;
-                            },
-                            ExecutionResult::Revert { .. } => {
-                                return Ok(U256::ZERO); // Transaction reverted
-                            },
-                            ExecutionResult::Halt { .. } => {
-                                return Ok(U256::ZERO); // Transaction halted
-                            },
-                        }
-                    },
-                    Err(_) => return Ok(U256::ZERO),
-                }
-            }
+            // Estimate gas based on transaction complexity
+            let gas_estimate = match tx.data.len() {
+                0..=4 => 21_000,      // Simple transfer
+                5..=100 => 50_000,    // Simple DeFi call
+                101..=500 => 150_000, // Complex DeFi call
+                _ => 300_000,         // Very complex call
+            };
+            
+            total_gas += gas_estimate;
         }
         
-        // Calculate net revenue
-        let gas_cost = U256::from(total_gas) * self.config.gas_price;
-        let revenue = if z_star > gas_cost { z_star - gas_cost } else { U256::ZERO };
+        // Calculate net revenue with mock slippage
+        let slippage_factor = 0.997; // 0.3% slippage
+        let mock_revenue = (z_star.as_limbs()[0] as f64 * slippage_factor) as u64;
+        let gas_cost = total_gas * self.config.gas_price.as_limbs()[0];
+        
+        let revenue = if mock_revenue > gas_cost {
+            U256::from(mock_revenue - gas_cost)
+        } else {
+            U256::ZERO
+        };
+        
+        // Cache result
+        self.simulation_cache.insert(cache_key, revenue);
         
         Ok(revenue)
     }
@@ -777,14 +772,8 @@ impl JITStrategyDiscoveryEngine {
         Ok(txs)
     }
 
-    fn init_revm(&self, _state: &StateSnapshot) -> DeFiResult<EVM<ChainStateDB>> {
-        let db = ChainStateDB::new();
-        let mut evm = EVM::builder()
-            .with_db(db)
-            .with_spec_id(SpecId::LONDON)
-            .build();
-            
-        Ok(evm)
+    fn init_mock_db(&self, _state: &StateSnapshot) -> DeFiResult<ChainStateDB> {
+        Ok(ChainStateDB::new())
     }
 
     fn assess_risk(&self, _path: &ArbitragePath) -> RiskLevel {
@@ -847,44 +836,39 @@ impl StateHistory {
 impl ChainStateDB {
     fn new() -> Self {
         Self {
-            accounts: HashMap::new(),
+            balances: HashMap::new(),
             contracts: HashMap::new(),
-            block_hashes: HashMap::new(),
+            storage: HashMap::new(),
         }
     }
-}
-
-// REVM Database implementation
-impl Database for ChainStateDB {
-    type Error = DeFiAnalyzerError;
-
-    fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        Ok(self.accounts.get(&address).cloned())
+    
+    /// Get account balance
+    pub fn get_balance(&self, address: &Address) -> U256 {
+        self.balances.get(address).copied().unwrap_or(U256::ZERO)
     }
-
-    fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        Ok(self.contracts.get(&code_hash).cloned().unwrap_or_default())
+    
+    /// Set account balance
+    pub fn set_balance(&mut self, address: Address, balance: U256) {
+        self.balances.insert(address, balance);
     }
-
-    fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        Ok(U256::ZERO) // Simplified
+    
+    /// Get contract code
+    pub fn get_code(&self, address: &Address) -> Vec<u8> {
+        self.contracts.get(address).cloned().unwrap_or_default()
     }
-
-    fn block_hash(&mut self, number: U256) -> Result<B256, Self::Error> {
-        let block_num = number.to::<u64>();
-        Ok(self.block_hashes.get(&block_num).copied().unwrap_or_default())
+    
+    /// Set contract code
+    pub fn set_code(&mut self, address: Address, code: Vec<u8>) {
+        self.contracts.insert(address, code);
     }
-}
-
-impl DatabaseCommit for ChainStateDB {
-    fn commit(&mut self, changes: HashMap<Address, revm::primitives::Account>) {
-        for (address, account) in changes {
-            self.accounts.insert(address, AccountInfo {
-                balance: account.info.balance,
-                nonce: account.info.nonce,
-                code_hash: account.info.code_hash,
-                code: account.info.code,
-            });
-        }
+    
+    /// Get storage value
+    pub fn get_storage(&self, address: &Address, key: &U256) -> U256 {
+        self.storage.get(&(*address, *key)).copied().unwrap_or(U256::ZERO)
+    }
+    
+    /// Set storage value
+    pub fn set_storage(&mut self, address: Address, key: U256, value: U256) {
+        self.storage.insert((address, key), value);
     }
 }

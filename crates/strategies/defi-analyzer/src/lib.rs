@@ -20,6 +20,11 @@ pub mod executors;
 pub mod negative_cycle_arbitrage;
 pub mod jit_strategy_discovery;
 pub mod integration_examples;
+pub mod production_config;
+pub mod production_error_handler;
+pub mod production_monitoring;
+pub mod production_security;
+pub mod production_load_testing;
 pub mod tests;
 
 // Re-export main components

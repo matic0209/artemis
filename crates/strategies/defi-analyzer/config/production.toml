@@ -1,0 +1,98 @@
+# Production Configuration for DeFi Analyzer Strategy
+
+[analyzer]
+enable_symbolic_execution = true
+enable_feature_extraction = true
+enable_documentation_comparison = false
+analysis_timeout_seconds = 30
+max_analysis_depth = 50
+min_profit_threshold = "1000000000000000"  # 0.001 ETH in wei
+risk_tolerance = 70
+enable_realtime_monitoring = true
+monitoring_interval_seconds = 10
+monitored_contracts = [
+    "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",  # Uniswap V2 Router
+    "0xE592427A0AEce92De3Edee1F18E0157C05861564",  # Uniswap V3 Router
+    "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",  # SushiSwap Router
+]
+
+[analyzer.abi_cache_settings]
+enable_caching = true
+cache_size_limit = 1000
+cache_ttl_seconds = 3600
+
+[analyzer.performance_settings]
+max_concurrent_analyses = 10
+enable_parallel_processing = true
+memory_limit_mb = 2048
+cpu_limit_percent = 80.0
+
+[jit_strategy]
+base_asset = "WETH"
+target_min = "5000000000000000"  # 0.005 ETH in wei
+time_budget_ms = 500
+max_path_length = 5
+max_growth_steps = 10
+max_no_improve_steps = 2
+gas_price = "20000000000"  # 20 gwei
+supported_protocols = [
+    "uniswap_v2",
+    "uniswap_v3", 
+    "sushiswap",
+    "curve",
+    "balancer"
+]
+
+[negative_cycle]
+target_revenue = "5000000000000000"  # 0.005 ETH in wei
+max_cycles_per_iteration = 10
+max_path_length = 5
+gas_price = "20000000000"  # 20 gwei
+base_gas_cost = 150000
+supported_protocols = [
+    "uniswap_v2",
+    "uniswap_v3",
+    "sushiswap", 
+    "curve"
+]
+
+[network]
+rpc_url = "https://eth-mainnet.g.alchemy.com/v2/YOUR_ALCHEMY_KEY"
+ws_url = "wss://eth-mainnet.g.alchemy.com/v2/YOUR_ALCHEMY_KEY"
+chain_id = 1
+block_confirmations = 1
+request_timeout = 30
+max_retries = 3
+rate_limit = 100
+
+[database]
+url = "postgresql://postgres:password@localhost:5432/defi_analyzer"
+pool_size = 10
+connection_timeout = 30
+query_timeout = 60
+enable_query_logging = false
+
+[monitoring]
+enable_metrics = true
+metrics_port = 9090
+health_check_port = 8080
+log_level = "info"
+structured_logging = true
+alerting_webhook = "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+
+[security]
+enable_auth = true
+api_keys = []  # Add your API keys here
+enable_rate_limiting = true
+max_requests_per_minute = 1000
+enable_ip_whitelist = false
+whitelisted_ips = []
+max_transaction_value = "100000000000000000000"  # 100 ETH in wei
+max_gas_limit = 10000000
+blacklisted_contracts = []
+enable_tx_validation = true
+
+[security.rate_limits]
+"/analyze" = 100
+"/health" = 1000
+"/metrics" = 500

@@ -28,7 +28,8 @@ diff_match_patch = "0.1.1"
 chrono = "0.4.42"
 # artemis-core = { path = "../../artemis-core" }
 tokio-stream = "0.1"
-revm = { version = "7.2", features = ["std"] }
+# revm = { version = "7.2", features = ["std"] }  # Conflicts with existing c-kzg versions
+toml = "0.8"
 
 [features]
 default = []
