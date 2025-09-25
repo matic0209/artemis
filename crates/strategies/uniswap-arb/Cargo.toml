@@ -22,7 +22,9 @@ alloy-signer = { version = "1" }
 alloy-signer-local = { version = "1" }
 alloy-primitives = { version = "1" }
 alloy-consensus = { version = "1" }
+alloy-rpc-types-eth = { version = "1" }
 primitive-types = { version = "0.12" }
+toml = "0.8"
 
 [features]
 default = []

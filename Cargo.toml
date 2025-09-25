@@ -2,7 +2,6 @@
 members = [
     # 核心模块
     "crates/core/artemis-core",
-    "crates/core/clients/chainbound",
     "crates/core/clients/opensea-v2",
     
     # 策略模块

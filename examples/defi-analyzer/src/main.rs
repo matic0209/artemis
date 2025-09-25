@@ -75,9 +75,13 @@ fn create_sample_events() -> Vec<AnalysisEvent> {
     vec![
         // Mempool transaction event
         AnalysisEvent {
-            event_type: EventType::MempoolTransaction,
+            event_type: "mempool_analysis".to_string(),
+            event_kind: Some(EventType::MempoolTransaction),
             contract_address: Address::from([0x01; 20]),
+            transaction_hash: [0u8; 32],
+            transaction_data: vec![0x12, 0x34, 0x56, 0x78],
             tx_data: Some(vec![0x12, 0x34, 0x56, 0x78]),
+            event_data: vec![],
             block_number: 18500000,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -88,9 +92,13 @@ fn create_sample_events() -> Vec<AnalysisEvent> {
         
         // Block with DeFi activity
         AnalysisEvent {
-            event_type: EventType::BlockWithDeFiActivity,
+            event_type: "block_analysis".to_string(),
+            event_kind: Some(EventType::BlockWithDeFiActivity),
             contract_address: Address::from([0x02; 20]),
+            transaction_hash: [0u8; 32],
+            transaction_data: vec![],
             tx_data: None,
+            event_data: vec![],
             block_number: 18500001,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -101,9 +109,13 @@ fn create_sample_events() -> Vec<AnalysisEvent> {
         
         // Contract deployment
         AnalysisEvent {
-            event_type: EventType::ContractDeployment,
+            event_type: "contract_deployment".to_string(),
+            event_kind: Some(EventType::ContractDeployment),
             contract_address: Address::from([0x03; 20]),
+            transaction_hash: [0u8; 32],
+            transaction_data: vec![0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45],
             tx_data: Some(vec![0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45]),
+            event_data: vec![],
             block_number: 18500002,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -114,9 +126,13 @@ fn create_sample_events() -> Vec<AnalysisEvent> {
         
         // MEV-Share event
         AnalysisEvent {
-            event_type: EventType::MevShareEvent,
+            event_type: "mevshare".to_string(),
+            event_kind: Some(EventType::MevShareEvent),
             contract_address: Address::from([0x04; 20]),
+            transaction_hash: [0u8; 32],
+            transaction_data: vec![0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88],
             tx_data: Some(vec![0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]),
+            event_data: vec![],
             block_number: 18500003,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -127,9 +143,13 @@ fn create_sample_events() -> Vec<AnalysisEvent> {
         
         // Custom analysis
         AnalysisEvent {
-            event_type: EventType::CustomAnalysis,
+            event_type: "custom".to_string(),
+            event_kind: Some(EventType::CustomAnalysis),
             contract_address: Address::from([0x05; 20]),
+            transaction_hash: [0u8; 32],
+            transaction_data: vec![],
             tx_data: None,
+            event_data: vec![],
             block_number: 18500004,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

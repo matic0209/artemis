@@ -630,7 +630,7 @@ impl ConcreteExecutionValidator {
             
             // Record state changes
             state_changes.push(StateChange {
-                address: Address::random(), // Mock pool address
+                address: Address::from_slice(&rand::random::<[u8; 20]>()), // Mock pool address
                 slot: U256::from(i),
                 old_value: U256::from(1000),
                 new_value: U256::from(1100),

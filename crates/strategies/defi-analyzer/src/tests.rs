@@ -55,7 +55,7 @@ impl DeFiAnalyzerTests {
         let b = BV::new_const(&self.ctx, "b", 256);
         let result = a + b;
         
-        assert!(!result.is_const());
+        assert!(!result.is_numeral());
         debug!("ADD operation test passed");
         
         // Test MUL operation
@@ -63,7 +63,7 @@ impl DeFiAnalyzerTests {
         let d = BV::new_const(&self.ctx, "d", 256);
         let mul_result = c * d;
         
-        assert!(!mul_result.is_const());
+        assert!(!mul_result.is_numeral());
         debug!("MUL operation test passed");
         
         Ok(())
@@ -81,7 +81,7 @@ impl DeFiAnalyzerTests {
         
         // Simulate memory load
         let loaded_value = value.clone();
-        assert!(!loaded_value.is_const());
+        assert!(!loaded_value.is_numeral());
         debug!("MLOAD operation test passed");
         
         // Test MSTORE operation
@@ -90,7 +90,7 @@ impl DeFiAnalyzerTests {
         
         // Simulate memory store
         let stored_value = store_value.clone();
-        assert!(!stored_value.is_const());
+        assert!(!stored_value.is_numeral());
         debug!("MSTORE operation test passed");
         
         Ok(())
@@ -108,7 +108,7 @@ impl DeFiAnalyzerTests {
         
         // Simulate storage load
         let loaded_storage = storage_value.clone();
-        assert!(!loaded_storage.is_const());
+        assert!(!loaded_storage.is_numeral());
         debug!("SLOAD operation test passed");
         
         // Test SSTORE operation
@@ -117,7 +117,7 @@ impl DeFiAnalyzerTests {
         
         // Simulate storage store
         let stored_storage = store_value.clone();
-        assert!(!stored_storage.is_const());
+        assert!(!stored_storage.is_numeral());
         debug!("SSTORE operation test passed");
         
         Ok(())
@@ -135,12 +135,12 @@ impl DeFiAnalyzerTests {
         
         // Simulate conditional jump
         let jump_condition = condition._eq(&BV::new_const(&self.ctx, "1", 256));
-        assert!(!jump_condition.is_const());
+        assert!(!jump_condition.is_numeral());
         debug!("JUMPI operation test passed");
         
         // Test JUMP operation
         let jump_dest = BV::new_const(&self.ctx, "jump_dest", 256);
-        assert!(!jump_dest.is_const());
+        assert!(!jump_dest.is_numeral());
         debug!("JUMP operation test passed");
         
         Ok(())
@@ -159,7 +159,7 @@ impl DeFiAnalyzerTests {
         
         // Simulate cross-contract call
         let call_result = BV::new_const(&self.ctx, "call_result", 256);
-        assert!(!call_result.is_const());
+        assert!(!call_result.is_numeral());
         debug!("CALL operation test passed");
         
         // Test STATICCALL operation
@@ -168,7 +168,7 @@ impl DeFiAnalyzerTests {
         
         // Simulate static call
         let static_result = BV::new_const(&self.ctx, "static_result", 256);
-        assert!(!static_result.is_const());
+        assert!(!static_result.is_numeral());
         debug!("STATICCALL operation test passed");
         
         Ok(())

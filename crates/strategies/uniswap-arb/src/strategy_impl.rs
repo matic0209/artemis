@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::collections::VecDeque;
 
-use anyhow::Result;
+use anyhow::{Result, Context};
 use async_trait::async_trait;
 use tracing::{debug, info, warn, error};
 
@@ -84,6 +84,8 @@ struct PricePredictor {
     price_history: HashMap<Address, VecDeque<PricePoint>>,
     /// 预测模型
     model: PriceModel,
+    /// 模型参数
+    model_params: PriceModelParams,
 }
 
 /// 风险评估器
@@ -92,6 +94,8 @@ struct RiskAssessor {
     risk_model: RiskModel,
     /// 历史风险评估数据
     risk_history: HashMap<Address, RiskMetrics>,
+    /// 风险参数
+    risk_params: RiskParams,
 }
 
 /// 价格数据点
@@ -127,6 +131,25 @@ struct RiskMetrics {
     pub liquidity_score: f64,
     pub competition_score: f64,
     pub overall_risk: f64,
+    pub overall_risk_score: f64,
+}
+
+/// 价格模型参数
+#[derive(Debug, Clone)]
+struct PriceModelParams {
+    pub volatility_factor: f64,
+    pub trend_weight: f64,
+    pub momentum_weight: f64,
+    pub mean_reversion_weight: f64,
+}
+
+/// 风险参数
+#[derive(Debug, Clone)]
+struct RiskParams {
+    pub max_volatility: f64,
+    pub min_liquidity: U256,
+    pub max_slippage: f64,
+    pub correlation_threshold: f64,
 }
 
 impl<P> MevShareUniArb<P>
@@ -509,7 +532,7 @@ where
         let min_liquidity = prices.v3_liquidity.min(prices.v2_liquidity);
         
         if min_liquidity.is_zero() {
-            return Ok(U256::zero());
+            return Ok(U256::ZERO);
         }
         
         // 滑点率 = 交易金额 / 流动性 * 影响因子
@@ -527,8 +550,8 @@ where
             return Ok(0.05); // 默认 5% 滑点
         }
         
-        let amount_f64 = amount.as_u128() as f64;
-        let liquidity_f64 = min_liquidity.as_u128() as f64;
+        let amount_f64 = amount.to::<u128>() as f64;
+        let liquidity_f64 = min_liquidity.to::<u128>() as f64;
         
         // 简化的滑点模型
         let impact_ratio = amount_f64 / liquidity_f64;
@@ -706,7 +729,7 @@ where
             .min_by_key(|_bundle| {
                 // 这里需要从 bundle 中提取金额进行比较
                 // 简化实现：返回第一个
-                U256::zero()
+                U256::ZERO
             })
             .unwrap();
         

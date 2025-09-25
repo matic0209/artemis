@@ -9,6 +9,9 @@ pub mod alloy_impl;
 /// This module contains the core strategy implementation.
 pub mod strategy;
 
+/// Strategy implementation details.
+pub mod strategy_impl;
+
 /// This module contains the core type definitions for the strategy.
 pub mod types;
 

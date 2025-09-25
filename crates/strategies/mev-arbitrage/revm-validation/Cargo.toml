@@ -19,12 +19,16 @@ alloy-provider = { version = "1.0.27", features = ["ws", "reqwest"] }
 alloy-rpc-types-eth = "1.0.27"
 
 # REVM for concrete execution
-# revm = { version = "7.2", features = ["std"] }  # Commented due to conflicts
+revm = { version = "28.0.1", features = ["std", "secp256k1"] }
+
+# Z3 for symbolic execution integration
+z3 = "0.12"
 
 # Utilities
 hex = "0.4"
 uuid = { version = "1.6", features = ["v4"] }
 chrono = "0.4.42"
+rand = "0.8"
 
 [features]
 default = []

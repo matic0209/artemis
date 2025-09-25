@@ -100,7 +100,7 @@ impl SandwichExecutor {
         let flashbots_bundle = bundle.clone().into();
         
         // 使用 alloy-mev 执行
-        use alloy_rpc_types_mev::eth_calls::EthSendBundle;
+        use alloy_rpc_types_mev::EthSendBundle;
         
         let bundle = EthSendBundle {
             txs: vec![

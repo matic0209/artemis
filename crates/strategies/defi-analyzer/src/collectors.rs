@@ -13,14 +13,16 @@ use crate::{
     error::DeFiResult,
 };
 
-// use artemis_core::{
-//     types::Collector,
-//     collectors::{
-//         block_collector::NewBlock,
-//         log_collector::Log,
-//         mempool_collector::PendingTx,
-//     },
-// };
+use artemis_core::{
+    types::Collector,
+    collectors::{
+        block_collector::NewBlock,
+        log_collector::LogCollector,
+        mempool_collector::MempoolCollector,
+    },
+};
+use alloy_rpc_types_eth::Log;
+use artemis_core::eth::Transaction;
 
 /// DeFi Block Collector
 /// Converts NewBlock events to DeFi analysis events
@@ -41,10 +43,10 @@ pub struct DeFiLogCollector {
 }
 
 /// DeFi Mempool Collector
-/// Converts PendingTx events to DeFi analysis events
+/// Converts Transaction events to DeFi analysis events
 pub struct DeFiMempoolCollector {
     /// Underlying mempool collector
-    mempool_collector: Box<dyn Collector<PendingTx>>,
+    mempool_collector: Box<dyn Collector<Transaction>>,
     /// Configuration
     config: DeFiCollectorConfig,
 }
@@ -102,13 +104,16 @@ impl DeFiBlockCollector {
         }
         
         Some(AnalysisEvent {
-            block_number: block.number,
-            transaction_hash: [0u8; 32], // Block-level event
-            contract_address: [0u8; 20], // Block-level event
-            transaction_data: vec![],
             event_type: "block_analysis".to_string(),
+            event_kind: None,
+            contract_address: [0u8; 20].into(),
+            transaction_hash: [0u8; 32],
+            transaction_data: vec![],
+            tx_data: None,
             event_data: serde_json::to_vec(&block).unwrap_or_default(),
+            block_number: block.number,
             timestamp: block.timestamp,
+            metadata: std::collections::HashMap::new(),
         })
     }
     
@@ -142,13 +147,16 @@ impl DeFiLogCollector {
         }
         
         Some(AnalysisEvent {
-            block_number: log.block_number,
-            transaction_hash: log.transaction_hash,
-            contract_address: log.address,
-            transaction_data: log.data,
             event_type: "log_analysis".to_string(),
+            event_kind: None,
+            contract_address: log.address,
+            transaction_hash: log.transaction_hash,
+            transaction_data: log.data,
+            tx_data: None,
             event_data: serde_json::to_vec(&log).unwrap_or_default(),
+            block_number: log.block_number,
             timestamp: log.timestamp,
+            metadata: std::collections::HashMap::new(),
         })
     }
     
@@ -161,15 +169,15 @@ impl DeFiLogCollector {
 
 impl DeFiMempoolCollector {
     /// Create a new DeFi mempool collector
-    pub fn new(mempool_collector: Box<dyn Collector<PendingTx>>, config: DeFiCollectorConfig) -> Self {
+    pub fn new(mempool_collector: Box<dyn Collector<Transaction>>, config: DeFiCollectorConfig) -> Self {
         Self {
             mempool_collector,
             config,
         }
     }
     
-    /// Convert PendingTx to AnalysisEvent
-    fn convert_tx_to_analysis_event(&self, tx: PendingTx) -> Option<AnalysisEvent> {
+    /// Convert Transaction to AnalysisEvent
+    fn convert_tx_to_analysis_event(&self, tx: Transaction) -> Option<AnalysisEvent> {
         if !self.config.enable_mempool_analysis {
             return None;
         }
@@ -186,18 +194,21 @@ impl DeFiMempoolCollector {
         }
         
         Some(AnalysisEvent {
-            block_number: 0, // Pending transaction
-            transaction_hash: tx.hash,
-            contract_address: tx.to.unwrap_or([0u8; 20]),
-            transaction_data: tx.input,
             event_type: "mempool_analysis".to_string(),
+            event_kind: None,
+            contract_address: tx.to.unwrap_or([0u8; 20].into()),
+            transaction_hash: tx.hash,
+            transaction_data: tx.input,
+            tx_data: None,
             event_data: serde_json::to_vec(&tx).unwrap_or_default(),
+            block_number: 0,
             timestamp: tx.timestamp,
+            metadata: std::collections::HashMap::new(),
         })
     }
     
     /// Check if transaction is a DeFi transaction
-    fn is_defi_transaction(&self, tx: &PendingTx) -> bool {
+    fn is_defi_transaction(&self, tx: &Transaction) -> bool {
         // Check if transaction is to a monitored protocol
         if let Some(to) = tx.to {
             let address_str = format!("0x{}", hex::encode(to));

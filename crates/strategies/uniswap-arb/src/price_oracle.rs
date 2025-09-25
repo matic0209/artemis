@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Result, Context};
 use tracing::{debug, warn, error};
 
 use artemis_core::{
@@ -150,7 +150,7 @@ where
     /// 查询 V3 链上价格
     async fn query_v3_price_onchain(&self, pool_address: Address) -> Result<(U256, U256)> {
         use alloy_rpc_types_eth::BlockNumberOrTag;
-        use alloy_primitives::{Bytes, address};
+        use alloy_primitives::{Bytes, Address};
         
         debug!("Querying V3 price for pool: {:?}", pool_address);
         
@@ -170,18 +170,18 @@ where
         let call_data = Bytes::from(slot0_selector.to_vec());
         let call_result = self.provider
             .call(&alloy_rpc_types_eth::TransactionRequest {
-                to: Some(alloy_rpc_types_eth::TransactionKind::Call(pool_address)),
-                data: Some(call_data),
+                to: Some(pool_address),
+                input: call_data.into(),
                 ..Default::default()
             })
             .block(BlockNumberOrTag::Latest)
             .await
-            .context_err("Failed to call slot0() on V3 pool")?;
+            .context("Failed to call slot0() on V3 pool")?;
 
         // 解析返回数据
         if call_result.len() >= 32 {
             // 提取 sqrtPriceX96 (前32字节)
-            let sqrt_price_x96 = U256::from_big_endian(&call_result[0..32]);
+            let sqrt_price_x96 = U256::from_be_slice(&call_result[0..32]);
             
             // 转换为价格 = (sqrtPriceX96 / 2^96)^2
             let price = self.sqrt_price_x96_to_price(sqrt_price_x96);
@@ -191,16 +191,16 @@ where
             let liquidity_call_data = Bytes::from(liquidity_selector.to_vec());
             let liquidity_result = self.provider
                 .call(&alloy_rpc_types_eth::TransactionRequest {
-                    to: Some(alloy_rpc_types_eth::TransactionKind::Call(pool_address)),
-                    data: Some(liquidity_call_data),
+                    to: Some(pool_address),
+                    input: liquidity_call_data.into(),
                     ..Default::default()
                 })
                 .block(BlockNumberOrTag::Latest)
                 .await
-                .context_err("Failed to call liquidity() on V3 pool")?;
+                .context("Failed to call liquidity() on V3 pool")?;
 
             let liquidity = if liquidity_result.len() >= 32 {
-                U256::from_big_endian(&liquidity_result[0..32])
+                U256::from_be_slice(&liquidity_result[0..32])
             } else {
                 U256::from(100000000000000000000u64) // 默认流动性
             };
@@ -231,19 +231,19 @@ where
         let call_data = Bytes::from(get_reserves_selector.to_vec());
         let call_result = self.provider
             .call(&alloy_rpc_types_eth::TransactionRequest {
-                to: Some(alloy_rpc_types_eth::TransactionKind::Call(pool_address)),
-                data: Some(call_data),
+                to: Some(pool_address),
+                input: call_data.into(),
                 ..Default::default()
             })
             .block(BlockNumberOrTag::Latest)
             .await
-            .context_err("Failed to call getReserves() on V2 pool")?;
+            .context("Failed to call getReserves() on V2 pool")?;
 
         // 解析返回数据
         if call_result.len() >= 96 { // 3 个 32 字节的返回值
             // 提取 reserve0 和 reserve1
-            let reserve0 = U256::from_big_endian(&call_result[0..32]);
-            let reserve1 = U256::from_big_endian(&call_result[32..64]);
+            let reserve0 = U256::from_be_slice(&call_result[0..32]);
+            let reserve1 = U256::from_be_slice(&call_result[32..64]);
             
             // 计算价格 = reserve1 / reserve0 (假设 token1/token0 价格)
             let price = if !reserve0.is_zero() {
@@ -294,13 +294,13 @@ where
         // 几何平均数 = sqrt(reserve0 * reserve1)
         // 简化实现：使用算术平均数作为近似
         if reserve0.is_zero() || reserve1.is_zero() {
-            return U256::zero();
+            return U256::ZERO;
         }
         
         // 使用牛顿法计算平方根的简化版本
         let product = reserve0 * reserve1;
         let mut x = product / U256::from(2);
-        let mut prev_x = U256::zero();
+        let mut prev_x = U256::ZERO;
         
         // 迭代几次来逼近平方根
         for _ in 0..10 {
@@ -320,8 +320,8 @@ where
             return 0.0;
         }
 
-        let v3_f64 = v3_price.as_u128() as f64;
-        let v2_f64 = v2_price.as_u128() as f64;
+        let v3_f64 = v3_price.to::<u128>() as f64;
+        let v2_f64 = v2_price.to::<u128>() as f64;
         
         ((v2_f64 - v3_f64) / v3_f64).abs()
     }
@@ -478,7 +478,7 @@ impl PricePredictor {
 
         // 简化的线性回归实现
         let prices: Vec<f64> = history.iter()
-            .map(|p| p.price.as_u128() as f64)
+            .map(|p| p.price.to::<u128>() as f64)
             .collect();
 
         // 计算趋势
@@ -509,7 +509,7 @@ impl PricePredictor {
 
         // 基于价格波动性计算置信度
         let prices: Vec<f64> = history.iter()
-            .map(|p| p.price.as_u128() as f64)
+            .map(|p| p.price.to::<u128>() as f64)
             .collect();
 
         let mean = prices.iter().sum::<f64>() / prices.len() as f64;
@@ -520,7 +520,7 @@ impl PricePredictor {
         
         // 波动性越低，置信度越高
         let volatility = std_dev / mean;
-        let confidence = (1.0 - volatility.min(1.0)).max(0.1);
+        let confidence = (1.0 - volatility.min(1.0)).max(0.1_f64);
         
         confidence
     }

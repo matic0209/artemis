@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use alloy_primitives::{Address, U256, Bytes};
 use anyhow::Result;
 use tracing::{info, warn, error};
+use std::collections::HashMap;
 
 use crate::{
     analyzer::DeFiAnalyzer,

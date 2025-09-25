@@ -34,7 +34,7 @@ async fn query_v2_reserves(
     
     let call_result = provider
         .call(&alloy_rpc_types_eth::TransactionRequest {
-            to: Some(alloy_rpc_types_eth::TransactionKind::Call(pool_address)),
+            to: Some(pool_address),
             data: Some(call_data),
             ..Default::default()
         })
@@ -43,8 +43,8 @@ async fn query_v2_reserves(
         .map_err(|e| anyhow!("调用 getReserves() 失败: {}", e))?;
 
     if call_result.len() >= 96 { // 3 * 32 bytes
-        let reserve0 = U256::from_big_endian(&call_result[0..32]);
-        let reserve1 = U256::from_big_endian(&call_result[32..64]);
+        let reserve0 = U256::from_be_slice(&call_result[0..32]);
+        let reserve1 = U256::from_be_slice(&call_result[32..64]);
         let block_timestamp_last = u32::from_be_bytes([
             call_result[92], call_result[93], call_result[94], call_result[95]
         ]);
@@ -246,7 +246,7 @@ impl SandwichStrategy {
                         max_profit = simulation_result.net_profit;
                         
                         info!("🧪 REVM 模拟成功 - 净利润: {:.6} ETH, Gas: {}, ROI: {:.2}%",
-                              simulation_result.net_profit.as_u128() as f64 / 1e18,
+                              simulation_result.net_profit.to::<u128>() as f64 / 1e18,
                               simulation_result.total_gas,
                               simulation_result.calculate_roi(U256::from(1000000000000000000u64)));
                     }
@@ -661,14 +661,14 @@ mod bundle_builder {
             // 暂时返回模拟交易，实际实现需要完整的交易构建
             let mock_tx_data = format!(
                 "0x7ff36ab5{:064x}{:064x}{:040x}{:064x}",
-                opportunity.optimal_input.as_u128(),  // amountIn
+                opportunity.optimal_input.to::<u128>(),  // amountIn
                 0u128,                                // amountOutMin
-                inventory.searcher_address.as_u128(), // to
+                inventory.searcher_address.to::<u128>(), // to
                 block.timestamp + 300                 // deadline
             );
             
             debug!("前置交易构建完成: 输入 {:.6} ETH", 
-                   opportunity.optimal_input.as_u128() as f64 / 1e18);
+                   opportunity.optimal_input.to::<u128>() as f64 / 1e18);
             
             Ok(mock_tx_data)
         }
@@ -685,14 +685,14 @@ mod bundle_builder {
             
             let mock_tx_data = format!(
                 "0x18cbafe5{:064x}{:064x}{:040x}{:064x}",
-                estimated_token_amount.as_u128(),     // amountIn
+                estimated_token_amount.to::<u128>(),     // amountIn
                 0u128,                                // amountOutMin  
-                inventory.searcher_address.as_u128(), // to
+                inventory.searcher_address.to::<u128>(), // to
                 block.timestamp + 300                 // deadline
             );
             
             debug!("后置交易构建完成: 卖出 {:.6} tokens", 
-                   estimated_token_amount.as_u128() as f64 / 1e18);
+                   estimated_token_amount.to::<u128>() as f64 / 1e18);
             
             Ok(mock_tx_data)
         }

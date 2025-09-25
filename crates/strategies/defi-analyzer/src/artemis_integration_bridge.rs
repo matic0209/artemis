@@ -23,8 +23,8 @@ use artemis_core::{
     engine::Engine,
     collectors::{
         block_collector::{BlockCollector, NewBlock},
-        log_collector::{LogCollector, Log},
-        mempool_collector::{MempoolCollector, PendingTx},
+        log_collector::LogCollector,
+        mempool_collector::MempoolCollector,
     },
     executors::{
         flashbots_alloy_executor::{FlashbotsAlloyExecutor, FlashbotsAlloyBundle},
@@ -189,10 +189,12 @@ impl artemis_core::types::Strategy<AnalysisEvent, AnalysisAction> for ArtemisMEV
                 for result in execution_results {
                     if result.success {
                         let action = AnalysisAction {
-                            action_id: format!("mev_arb_{}", event.block_number),
                             action_type: crate::types::ActionType::ArbitrageExecution,
+                            contract_address: event.contract_address,
                             target_address: event.contract_address,
-                            calldata: vec![], // Would contain actual call data
+                            parameters: crate::types::AnalysisParameters { abi_json: None, function_name: None, depth: 0, timeout_seconds: 0, config: std::collections::HashMap::new() },
+                            action_id: format!("mev_arb_{}", event.block_number),
+                            calldata: vec![],
                             value: alloy_primitives::U256::ZERO,
                             gas_limit: 500_000,
                             gas_price: 20_000_000_000,
@@ -204,6 +206,7 @@ impl artemis_core::types::Strategy<AnalysisEvent, AnalysisAction> for ArtemisMEV
                             min_timestamp: event.timestamp,
                             max_timestamp: event.timestamp + 12,
                             metadata: std::collections::HashMap::new(),
+                            priority: 50,
                         };
                         actions.push(action);
                         self.stats.successful_executions += 1;

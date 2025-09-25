@@ -20,8 +20,8 @@ use artemis_core::{
     engine::Engine,
     collectors::{
         block_collector::{BlockCollector, NewBlock},
-        log_collector::{LogCollector, Log}, 
-        mempool_collector::{MempoolCollector, PendingTx},
+        log_collector::LogCollector,
+        mempool_collector::MempoolCollector,
     },
     executors::{
         flashbots_alloy_executor::{FlashbotsAlloyExecutor, FlashbotsAlloyBundle},
@@ -320,9 +320,11 @@ impl CompleteMEVStrategy {
     /// Create arbitrage action from graph cycle
     fn create_arbitrage_action_from_cycle(&self, event: &AnalysisEvent, cycle: &str) -> Result<AnalysisAction> {
         Ok(AnalysisAction {
-            action_id: format!("graph_arb_{}_{}", event.block_number, cycle.len()),
             action_type: ActionType::ArbitrageExecution,
+            contract_address: event.contract_address,
             target_address: event.contract_address,
+            parameters: crate::types::AnalysisParameters { abi_json: None, function_name: None, depth: 0, timeout_seconds: 0, config: HashMap::new() },
+            action_id: format!("graph_arb_{}_{}", event.block_number, cycle.len()),
             calldata: self.encode_arbitrage_calldata(cycle)?,
             value: alloy_primitives::U256::ZERO,
             gas_limit: 500_000,
@@ -335,15 +337,18 @@ impl CompleteMEVStrategy {
             min_timestamp: event.timestamp,
             max_timestamp: event.timestamp + 12,
             metadata: HashMap::new(),
+            priority: 50,
         })
     }
     
     /// Create action from Z3 optimization
     fn create_action_from_optimization(&self, event: &AnalysisEvent, optimization: &Z3OptimizationResult) -> Result<AnalysisAction> {
         Ok(AnalysisAction {
-            action_id: format!("symbolic_arb_{}_{}", event.block_number, optimization.confidence as u32),
             action_type: ActionType::ArbitrageExecution,
+            contract_address: event.contract_address,
             target_address: event.contract_address,
+            parameters: crate::types::AnalysisParameters { abi_json: None, function_name: None, depth: 0, timeout_seconds: 0, config: HashMap::new() },
+            action_id: format!("symbolic_arb_{}_{}", event.block_number, optimization.confidence as u32),
             calldata: self.encode_optimization_calldata(optimization)?,
             value: alloy_primitives::U256::ZERO,
             gas_limit: 800_000, // Higher gas for complex strategies
@@ -356,6 +361,7 @@ impl CompleteMEVStrategy {
             min_timestamp: event.timestamp,
             max_timestamp: event.timestamp + 12,
             metadata: [("z3_optimized".to_string(), "true".to_string())].into_iter().collect(),
+            priority: 60,
         })
     }
     
@@ -688,8 +694,9 @@ impl REVMValidationEngine {
         
         // Calculate realistic results
         let gas_cost = alloy_primitives::U256::from(action.gas_limit) * alloy_primitives::U256::from(action.gas_price);
-        let actual_profit = if action.expected_profit > gas_cost {
-            action.expected_profit - gas_cost
+        let expected_profit = action.expected_profit;
+        let actual_profit = if expected_profit > gas_cost {
+            expected_profit - gas_cost
         } else {
             alloy_primitives::U256::ZERO
         };
@@ -788,13 +795,14 @@ impl CompleteMEVCollector {
     
     fn convert_block_to_analysis_event(&self, block: NewBlock) -> AnalysisEvent {
         AnalysisEvent {
-            block_number: block.number,
-            transaction_hash: [0u8; 32], // Block-level event
-            contract_address: [0u8; 20], // Block-level event
-            transaction_data: vec![],
             event_type: "new_block".to_string(),
+            block_number: block.number,
+            contract_address: [0u8; 20].into(),
+            transaction_hash: [0u8; 32],
+            transaction_data: vec![],
             event_data: serde_json::to_vec(&block).unwrap_or_default(),
             timestamp: block.timestamp,
+            ..Default::default()
         }
     }
     
@@ -805,13 +813,14 @@ impl CompleteMEVCollector {
         }
         
         Some(AnalysisEvent {
-            block_number: log.block_number,
-            transaction_hash: log.transaction_hash,
-            contract_address: log.address.into(),
-            transaction_data: log.data,
             event_type: "contract_log".to_string(),
+            block_number: log.block_number,
+            contract_address: log.address.into(),
+            transaction_hash: log.transaction_hash,
+            transaction_data: log.data,
             event_data: serde_json::to_vec(&log).unwrap_or_default(),
             timestamp: log.timestamp,
+            ..Default::default()
         })
     }
     
@@ -822,13 +831,14 @@ impl CompleteMEVCollector {
         }
         
         Some(AnalysisEvent {
-            block_number: 0, // Pending
-            transaction_hash: tx.hash,
-            contract_address: tx.to.unwrap_or([0u8; 20]),
-            transaction_data: tx.input,
             event_type: "pending_transaction".to_string(),
+            block_number: 0,
+            contract_address: tx.to.unwrap_or([0u8; 20].into()),
+            transaction_hash: tx.hash,
+            transaction_data: tx.input,
             event_data: serde_json::to_vec(&tx).unwrap_or_default(),
             timestamp: tx.timestamp,
+            ..Default::default()
         })
     }
 }
@@ -960,7 +970,7 @@ impl CompleteMEVExecutor {
     fn create_mempool_transaction(&self, action: &AnalysisAction) -> Result<SubmitTxToMempool> {
         // Create mempool transaction from action
         Ok(SubmitTxToMempool {
-            tx: alloy_primitives::TxEnvelope::default(), // Would be properly constructed
+            tx: alloy_primitives::Transaction::default(), // Would be properly constructed
         })
     }
 }

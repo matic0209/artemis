@@ -761,8 +761,8 @@ impl DataCollectionLayer {
             // Mock mempool transaction
             let tx_event = TransactionEvent {
                 hash: [rand::random(); 32],
-                from: Address::random(),
-                to: Some(Address::random()),
+                from: Address::from_slice(&rand::random::<[u8; 20]>()),
+                to: Some(Address::from_slice(&rand::random::<[u8; 20]>())),
                 value: U256::from(rand::random::<u64>()),
                 gas_price: U256::from(20_000_000_000u64 + rand::random::<u64>() % 50_000_000_000u64),
                 gas_limit: 150_000,
@@ -786,7 +786,7 @@ impl DataCollectionLayer {
                 price: 2000.0 + (rand::random::<f64>() - 0.5) * 100.0, // Price ± $50
                 liquidity: U256::from(1_000_000) * U256::from(10u64.pow(18)),
                 protocol: "uniswap_v2".to_string(),
-                pool_address: Address::random(),
+                pool_address: Address::from_slice(&rand::random::<[u8; 20]>()),
             };
             
             if let Err(e) = event_tx.send(MEVEvent::PriceUpdate(price_event)) {
@@ -853,7 +853,7 @@ impl ExecutionLayer {
             let swap_bytecode = self.generate_swap_bytecode(from_token, to_token)?;
             
             // Use path explorer to analyze execution paths
-            let contract_address = Address::random(); // Mock contract address
+            let contract_address = Address::from_slice(&rand::random::<[u8; 20]>()); // Mock contract address
             let paths = self.path_explorer.explore_paths(&swap_bytecode, &contract_address).await?;
             
             info!("Found {} execution paths for {} -> {}", paths.len(), from_token, to_token);

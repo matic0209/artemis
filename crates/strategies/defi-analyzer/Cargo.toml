@@ -37,6 +37,8 @@ toml = "0.8"
 dashmap = "5"
 parking_lot = "0.12"
 crossbeam = "0.8"
+diff_match_patch = "0.1.1"
+rand = "0.8"
 
 [features]
 default = []

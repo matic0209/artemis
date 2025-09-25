@@ -3,7 +3,14 @@ use artemis_core::{
     executors::flashbots_alloy_executor::FlashbotsAlloyBundle,
     eth::{Address, Hash, Transaction, U256, U64},
 };
-use cfmms::pool::Pool;
+// Local Pool type (replacing cfmms dependency)
+#[derive(Debug, Clone)]
+pub struct Pool {
+    pub address: Address,
+    pub token0: Address,
+    pub token1: Address,
+    pub fee: u32,
+}
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

@@ -628,8 +628,8 @@ impl MEVDefenseEngine {
     fn generate_dummy_transaction(&self, _index: u32) -> DeFiResult<TransactionInfo> {
         Ok(TransactionInfo {
             hash: [0u8; 32],
-            from: Address::random(),
-            to: Some(Address::random()),
+            from: Address::from_slice(&rand::random::<[u8; 20]>()),
+            to: Some(Address::from_slice(&rand::random::<[u8; 20]>())),
             value: U256::ZERO,
             gas_price: U256::from(20_000_000_000u64),
             gas_limit: 21_000,

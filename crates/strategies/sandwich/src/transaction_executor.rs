@@ -4,8 +4,8 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result, Context};
 use tracing::{debug, info, warn, error};
 use tokio::sync::Mutex;
-
-use revm::primitives::{TransactTo, TxEnv, U256 as RevmU256, Address as RevmAddress, Bytes};
+use revm::primitives::{U256 as RevmU256, Address as RevmAddress, Bytes};
+use crate::revm_engine::{RevmTransactTo as TransactTo, RevmTxEnv as TxEnv};
 use artemis_core::eth::{Address, U256, Transaction};
 
 use crate::revm_engine::{RevmEngine, TransactionResult};
@@ -114,7 +114,7 @@ impl TransactionExecutor {
         let price_impact = self.calculate_price_impact(&victim_results)?;
         
         info!("🎯 Sandwich 模拟完成 - 净利润: {:.4} ETH, 总 Gas: {}", 
-              net_profit.as_u128() as f64 / 1e18, total_gas);
+              net_profit.to::<u128>() as f64 / 1e18, total_gas);
         
         Ok(SandwichSimulationResult {
             success: true,
@@ -254,7 +254,7 @@ impl TransactionExecutor {
         input[63] = slot;
         
         let hash = keccak256(&input);
-        Ok(U256::from_big_endian(&hash.0))
+        Ok(U256::from_be_slice(&hash.0))
     }
 }
 
@@ -457,8 +457,8 @@ impl SandwichSimulationResult {
             return 0.0;
         }
         
-        let profit_f64 = self.net_profit.as_u128() as f64;
-        let investment_f64 = initial_investment.as_u128() as f64;
+        let profit_f64 = self.net_profit.to::<u128>() as f64;
+        let investment_f64 = initial_investment.to::<u128>() as f64;
         
         (profit_f64 / investment_f64) * 100.0
     }

@@ -19,8 +19,9 @@
 //! Please refer to the crate README file for an example on how to use these components.
 
 /// Fiber Network client module
-pub mod fiber;
-pub use fiber::{Event, FiberCollector, StreamType};
+// Temporarily disabled due to alloy version conflict
+// pub mod fiber;
+// pub use fiber::{Event, FiberCollector, StreamType};
 
 /// Echo RPC client module
 pub mod echo;
@@ -43,7 +44,9 @@ mod tests {
     };
     use futures::StreamExt;
 
-    use crate::{BlockBuilder, EchoExecutor, Event, FiberCollector, SendBundleArgs, StreamType};
+    use crate::{BlockBuilder, EchoExecutor, SendBundleArgs};
+    // Temporarily disabled due to alloy version conflict
+    // use crate::{Event, FiberCollector, StreamType};
 
     #[tokio::test]
     async fn test_chainbound_client() {

@@ -10,13 +10,96 @@ use alloy_primitives::{Address, U256, Bytes};
 use tracing::{info, debug, warn, error};
 use anyhow::Result;
 
-use crate::{
-    evm_interpreter::{SymbolicEVMInterpreter, ExecutionPath, EVMExecutionState},
-    path_explorer::{PathExplorer, PathExplorerConfig},
-    jit_strategy_discovery::{StrategyCandidate, DeFiAction, JITConfig},
-    types::{AnalysisEvent, RiskLevel},
-    error::{DeFiResult, DeFiAnalyzerError},
-};
+// Note: These imports need to be from the defi-analyzer crate
+// For now, we'll define local types or use external dependencies
+
+/// Local type definitions for compatibility
+pub type ExecutionPath = Vec<DeFiAction>;
+pub type EVMExecutionState = HashMap<Address, U256>;
+
+/// Risk level enumeration
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RiskLevel {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+/// DeFi action enumeration
+#[derive(Debug, Clone)]
+pub enum DeFiAction {
+    Swap { from: Address, to: Address, amount: U256 },
+    AddLiquidity { token_a: Address, token_b: Address, amount_a: U256, amount_b: U256 },
+    RemoveLiquidity { token_a: Address, token_b: Address, amount: U256 },
+    Stake { token: Address, amount: U256 },
+    Unstake { token: Address, amount: U256 },
+}
+
+/// Strategy candidate
+#[derive(Debug, Clone)]
+pub struct StrategyCandidate {
+    pub actions: Vec<DeFiAction>,
+    pub path: Vec<DeFiAction>,
+    pub expected_profit: U256,
+    pub revenue: U256,
+    pub risk_level: RiskLevel,
+    pub gas_estimate: u64,
+}
+
+/// Analysis event
+#[derive(Debug, Clone)]
+pub struct AnalysisEvent {
+    pub event_type: String,
+    pub block_number: u64,
+    pub transaction_hash: String,
+    pub data: HashMap<String, String>,
+}
+
+/// Result type alias
+pub type DeFiResult<T> = Result<T, String>;
+
+/// OpCode enumeration
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpCode {
+    SLOAD,
+    SSTORE,
+    CALL,
+    MUL,
+    DIV,
+}
+
+/// Strategy type enumeration
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StrategyType {
+    ARB,
+    SMT,
+    JIT,
+}
+
+/// Symbolic EVM Interpreter placeholder
+pub struct SymbolicEVMInterpreter {
+    pub context: String,
+}
+
+impl SymbolicEVMInterpreter {
+    pub fn new() -> Self {
+        Self {
+            context: "default".to_string(),
+        }
+    }
+}
+
+/// Path Explorer placeholder
+pub struct PathExplorer {
+    pub config: String,
+}
+
+impl PathExplorer {
+    pub async fn explore_paths(&self, _bytecode: &[u8], _address: &Address) -> DeFiResult<Vec<ExecutionPath>> {
+        Ok(vec![])
+    }
+}
 
 /// Corrected MEV Arbitrage Engine
 pub struct MEVArbitrageEngine {
@@ -33,9 +116,9 @@ pub struct SymbolicStrategyDiscoverer {
     /// Z3 context for symbolic execution
     ctx: z3::Context,
     /// Symbolic EVM interpreter
-    symbolic_evm: SymbolicEVMInterpreter<'static>,
+    symbolic_evm: SymbolicEVMInterpreter,
     /// Path explorer for behavior analysis
-    path_explorer: PathExplorer<'static>,
+    path_explorer: PathExplorer,
     /// Configuration
     config: SymbolicDiscoveryConfig,
 }
@@ -76,6 +159,8 @@ pub struct SymbolicDiscoveryConfig {
     pub enable_z3_optimization: bool,
     /// Analysis timeout
     pub analysis_timeout: Duration,
+    /// Minimum profit threshold
+    pub min_profit_threshold: U256,
 }
 
 /// Concrete validation configuration
@@ -220,6 +305,7 @@ impl Default for MEVConfig {
                 max_paths_per_contract: 100,
                 enable_z3_optimization: true,
                 analysis_timeout: Duration::from_millis(300),
+                min_profit_threshold: U256::from(1000000000000000000u64), // 1 ETH
             },
             validation_config: ConcreteValidationConfig {
                 enable_fork_simulation: true,
@@ -352,8 +438,10 @@ impl SymbolicStrategyDiscoverer {
     pub fn new(config: SymbolicDiscoveryConfig) -> DeFiResult<Self> {
         let z3_config = z3::Config::new();
         let ctx = z3::Context::new(&z3_config);
-        let symbolic_evm = SymbolicEVMInterpreter::new(&ctx);
-        let path_explorer = PathExplorer::new(&ctx, PathExplorerConfig::default());
+        let symbolic_evm = SymbolicEVMInterpreter::new();
+        let path_explorer = PathExplorer {
+            config: "default".to_string(),
+        };
         
         Ok(Self {
             ctx,
@@ -476,27 +564,27 @@ impl SymbolicStrategyDiscoverer {
         let mut effects = Vec::new();
         
         // Analyze execution path to extract patterns
-        for state in path.iter() {
-            match state.current_opcode {
-                crate::evm_interpreter::OpCode::SLOAD => {
-                    // Storage read indicates dependency
+        for action in path.iter() {
+            match action {
+                DeFiAction::Swap { .. } => {
+                    // Swap action indicates trading dependency
                     conditions.push(SymbolicCondition {
-                        description: "storage_dependency".to_string(),
-                        constraint: "sload_condition".to_string(),
+                        description: "swap_dependency".to_string(),
+                        constraint: "swap_condition".to_string(),
                     });
                 },
-                crate::evm_interpreter::OpCode::SSTORE => {
-                    // Storage write indicates state change
+                DeFiAction::AddLiquidity { .. } => {
+                    // Liquidity addition indicates dependency
                     effects.push(SymbolicEffect {
-                        description: "state_modification".to_string(),
+                        description: "liquidity_modification".to_string(),
                         state_changes: vec!["storage_update".to_string()],
                     });
                 },
-                crate::evm_interpreter::OpCode::CALL => {
-                    // External call indicates interaction
+                DeFiAction::RemoveLiquidity { .. } => {
+                    // Liquidity removal indicates interaction
                     effects.push(SymbolicEffect {
-                        description: "external_interaction".to_string(),
-                        state_changes: vec!["cross_contract_call".to_string()],
+                        description: "liquidity_removal".to_string(),
+                        state_changes: vec!["liquidity_update".to_string()],
                     });
                 },
                 _ => {}
@@ -532,7 +620,11 @@ impl SymbolicStrategyDiscoverer {
             contracts: vec![Address::ZERO, Address::ZERO],
             profit_potential: U256::from(10_000_000_000_000_000u64),
             risk_level: RiskLevel::Medium,
-            execution_path: vec!["WETH".to_string(), "USDC".to_string(), "WETH".to_string()],
+            execution_path: vec![
+                DeFiAction::Swap { from: Address::ZERO, to: Address::ZERO, amount: U256::from(0) },
+                DeFiAction::Swap { from: Address::ZERO, to: Address::ZERO, amount: U256::from(0) },
+                DeFiAction::Swap { from: Address::ZERO, to: Address::ZERO, amount: U256::from(0) },
+            ],
         }))
     }
     
@@ -556,7 +648,7 @@ impl SymbolicStrategyDiscoverer {
         Ok(())
     }
     
-    fn encode_profit_function(&self, _opportunity: &ArbitrageOpportunity, investment: &z3::ast::BV, _slippage: &z3::ast::BV) -> DeFiResult<z3::ast::BV> {
+    fn encode_profit_function<'a>(&'a self, _opportunity: &ArbitrageOpportunity, investment: &z3::ast::BV<'a>, _slippage: &z3::ast::BV) -> DeFiResult<z3::ast::BV<'a>> {
         // Simplified profit function: profit = investment * 1.01 (1% profit)
         let profit_rate = z3::ast::BV::from_u64(&self.ctx, 101, 256);
         let hundred = z3::ast::BV::from_u64(&self.ctx, 100, 256);
@@ -565,13 +657,12 @@ impl SymbolicStrategyDiscoverer {
     
     fn extract_strategy_from_model(&self, opportunity: &ArbitrageOpportunity, model: &z3::Model) -> DeFiResult<StrategyCandidate> {
         Ok(StrategyCandidate {
+            actions: opportunity.execution_path.clone(),
             path: opportunity.execution_path.clone(),
+            expected_profit: opportunity.profit_potential,
             revenue: opportunity.profit_potential,
-            strategy_type: crate::jit_strategy_discovery::StrategyType::SMT,
             risk_level: opportunity.risk_level,
-            gas_cost: U256::from(300_000) * U256::from(20_000_000_000u64),
-            net_profit: opportunity.profit_potential.saturating_sub(U256::from(300_000) * U256::from(20_000_000_000u64)),
-            transactions: vec![],
+            gas_estimate: 300_000,
         })
     }
 }
@@ -610,11 +701,15 @@ impl ConcreteExecutionValidator {
         
         // Simulate each step in the arbitrage path
         for (i, step) in strategy.path.windows(2).enumerate() {
-            let from_token = &step[0];
-            let to_token = &step[1];
+            let (from_token, to_token) = match (&step[0], &step[1]) {
+                (DeFiAction::Swap { from, to, .. }, DeFiAction::Swap { from: to_from, to: to_to, .. }) => {
+                    (from.to_string(), to_to.to_string())
+                },
+                _ => continue, // Skip non-swap actions
+            };
             
             // Simulate swap execution
-            let (gas_used, success) = self.simulate_swap(from_token, to_token, strategy.revenue / U256::from(strategy.path.len() as u64 - 1)).await?;
+            let (gas_used, success) = self.simulate_swap(&from_token, &to_token, strategy.revenue / U256::from(strategy.path.len() as u64 - 1)).await?;
             
             total_gas += gas_used;
             
@@ -630,7 +725,7 @@ impl ConcreteExecutionValidator {
             
             // Record state changes
             state_changes.push(StateChange {
-                address: Address::random(), // Mock pool address
+                address: Address::from_slice(&rand::random::<[u8; 20]>()), // Mock pool address
                 slot: U256::from(i),
                 old_value: U256::from(1000),
                 new_value: U256::from(1100),
@@ -710,7 +805,7 @@ pub struct ArbitrageOpportunity {
     pub contracts: Vec<Address>,
     pub profit_potential: U256,
     pub risk_level: RiskLevel,
-    pub execution_path: Vec<String>,
+    pub execution_path: Vec<DeFiAction>,
 }
 
 #[derive(Debug, Clone)]

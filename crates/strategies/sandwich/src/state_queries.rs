@@ -7,9 +7,10 @@ use anyhow::Result;
 use tracing::{debug, warn, error};
 
 use artemis_core::{
-    eth::{Address, U256, Provider},
+    eth::{Address, U256},
     error::{ArtemisError, ResultExt},
 };
+use alloy_provider::Provider;
 
 use crate::types::{PoolState, TokenInventory, BlockInfo};
 use crate::pools::Pool;
