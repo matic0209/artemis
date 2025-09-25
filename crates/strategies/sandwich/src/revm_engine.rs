@@ -7,14 +7,14 @@ use tracing::{debug, info, warn, error};
 
 use revm::{
     database::InMemoryDB,
-    primitives::{
-        AccountInfo, Address as RevmAddress, Bytecode, BlockEnv, CfgEnv, Env, ExecutionResult, Output, SpecId,
-        TransactTo, TxEnv, U256 as RevmU256, B256, KECCAK_EMPTY,
-    },
     handler::MainBuilder,
+    primitives::{keccak256, Address as RevmAddress, U256 as RevmU256, B256, KECCAK_EMPTY},
 };
-
-pub use revm::primitives::{TransactTo as RevmTransactTo, TxEnv as RevmTxEnv};
+use revm_context::{BlockEnv, CfgEnv, Context as RevmContext, TxEnv as RevmTxEnv};
+use revm_context_interface::result::{ExecutionResult, Output};
+use revm_primitives::hardfork::SpecId;
+use revm_primitives::AccountInfo;
+pub use revm_primitives::TxKind as RevmTransactTo;
 
 use artemis_core::eth::{Address, U256};
 use alloy_provider::Provider;
@@ -49,7 +49,7 @@ impl Default for RevmConfig {
 
 /// REVM 引擎核心
 pub struct RevmEngine {
-    /// EVM 实例
+    /// EVM 构建器
     evm: MainBuilder<InMemoryDB>,
     /// 配置
     config: RevmConfig,
@@ -81,7 +81,7 @@ impl RevmEngine {
         // 创建数据库
         let db = InMemoryDB::default();
         
-        // 构建 EVM using REVM 29.0.0 API
+        // 构建 EVM 构建器
         let evm = MainBuilder::new()
             .with_cfg_env(cfg)
             .with_block_env(block_env)
@@ -99,7 +99,7 @@ impl RevmEngine {
     }
     
     /// 从链上同步关键状态
-    pub async fn sync_from_chain(&mut self, provider: Arc<Provider>) -> Result<()> {
+    pub async fn sync_from_chain(&mut self, provider: Arc<dyn Provider>) -> Result<()> {
         info!("🔄 开始从链上同步状态...");
         
         // 同步关键合约状态
@@ -272,7 +272,7 @@ impl StateManager {
     }
     
     /// 同步关键合约状态
-    pub async fn sync_contracts(&mut self, provider: Arc<Provider>) -> Result<()> {
+    pub async fn sync_contracts(&mut self, provider: Arc<dyn Provider>) -> Result<()> {
         debug!("🔄 同步合约状态...");
         
         // 关键合约地址
@@ -303,7 +303,7 @@ impl StateManager {
     }
     
     /// 同步账户余额
-    pub async fn sync_balances(&mut self, provider: Arc<Provider>) -> Result<()> {
+    pub async fn sync_balances(&mut self, provider: Arc<dyn Provider>) -> Result<()> {
         debug!("💰 同步账户余额...");
         
         // 这里可以添加需要同步余额的账户

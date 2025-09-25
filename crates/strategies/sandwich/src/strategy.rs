@@ -25,20 +25,19 @@ async fn query_v2_reserves(
     provider: Arc<Provider>,
     pool_address: Address,
 ) -> Result<(U256, U256, u32)> {
-    use alloy_rpc_types_eth::BlockNumberOrTag;
-    use alloy_primitives::Bytes;
+    use alloy_rpc_types_eth::TransactionRequest;
+    use alloy_primitives::{Bytes, TxKind};
     
     // getReserves() 方法选择器: 0x0902f1ac
     let get_reserves_selector = [0x09, 0x02, 0xf1, 0xac];
     let call_data = Bytes::from(get_reserves_selector.to_vec());
     
     let call_result = provider
-        .call(&alloy_rpc_types_eth::TransactionRequest {
-            to: Some(pool_address),
-            data: Some(call_data),
+        .call(TransactionRequest {
+            to: Some(TxKind::Call(pool_address)),
+            input: call_data.into(),
             ..Default::default()
         })
-        .block(BlockNumberOrTag::Latest)
         .await
         .map_err(|e| anyhow!("调用 getReserves() 失败: {}", e))?;
 

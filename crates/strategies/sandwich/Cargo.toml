@@ -29,6 +29,7 @@ metrics = "0.22"
 # DeFi utilities (removed cfmms for Alloy compatibility)
 # cfmms = { git = "https://github.com/0xKitsune/cfmms-rs" }
 revm = { version = "28.0.1", features = ["std", "secp256k1"] }
+revm-primitives = "20.2.1"
 once_cell = "1.19"
 hex = "0.4"
 reqwest = { version = "0.11", features = ["json"] }
