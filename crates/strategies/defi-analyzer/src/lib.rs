@@ -27,6 +27,9 @@ pub mod production_security;
 pub mod production_load_testing;
 pub mod mev_arbitrage_bot;
 pub mod mev_arbitrage_engine;
+pub mod technical_integration_demo;
+pub mod mev_defense_strategies;
+pub mod artemis_integration_bridge;
 pub mod tests;
 
 // Re-export main components
