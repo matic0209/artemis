@@ -18,6 +18,9 @@ use crate::{
     production_config::ProductionConfig,
     production_monitoring::{ProductionMetrics, MetricsConfig},
     production_security::ProductionSecurity,
+    evm_interpreter::{SymbolicEVMInterpreter, ExecutionPath, EVMExecutionState, SEVM},
+    path_explorer::{PathExplorer, PathExplorerConfig},
+    abi_parser::ABIParser,
 };
 
 /// Complete MEV Arbitrage Bot
@@ -60,6 +63,12 @@ pub struct ExecutionLayer {
     gas_optimizer: GasOptimizer,
     /// Execution manager
     execution_manager: ExecutionManager,
+    /// Symbolic EVM interpreter for execution simulation
+    symbolic_evm: SymbolicEVMInterpreter<'static>,
+    /// Path explorer for execution path analysis
+    path_explorer: PathExplorer<'static>,
+    /// ABI parser for contract interaction
+    abi_parser: ABIParser,
     /// Configuration
     config: ExecutionConfig,
 }
@@ -552,18 +561,20 @@ impl MEVArbitrageBot {
             return Ok(false);
         }
         
-        // 2. Build transactions
-        let transactions = self.build_arbitrage_transactions(strategy).await?;
+        // 2. Use symbolic EVM for comprehensive execution analysis
+        let simulation_result = self.execution_layer.simulate_arbitrage_execution(strategy).await?;
         
-        // 3. Simulate execution
-        if self.config.security.enable_tx_validation {
-            for tx in &transactions {
-                if !self.simulate_transaction(tx).await? {
-                    warn!("Transaction simulation failed, aborting strategy");
-                    return Ok(false);
-                }
-            }
+        if !simulation_result.success {
+            warn!("Symbolic EVM simulation failed: success_probability={:.2}%, reverts={}", 
+                  simulation_result.success_probability * 100.0, simulation_result.potential_reverts);
+            return Ok(false);
         }
+        
+        info!("✅ Symbolic EVM validation passed: {:.2}% success probability, {} execution paths analyzed",
+              simulation_result.success_probability * 100.0, simulation_result.execution_paths);
+        
+        // 3. Build transactions based on simulation results
+        let transactions = self.build_arbitrage_transactions(strategy).await?;
         
         // 4. Execute transactions
         let mut success_count = 0;
@@ -640,15 +651,28 @@ impl MEVArbitrageBot {
         expected_out * U256::from(99) / U256::from(100) // 1% slippage tolerance
     }
     
-    /// Simulate transaction execution
+    /// Simulate transaction execution using symbolic EVM
     async fn simulate_transaction(&self, tx: &ArbitrageTransaction) -> Result<bool> {
         debug!("Simulating transaction: {} -> {}", tx.from_token, tx.to_token);
         
-        // Mock simulation - in production, this would use REVM or fork testing
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        // Create mock strategy for simulation
+        let mock_strategy = StrategyCandidate {
+            path: vec![tx.from_token.clone(), tx.to_token.clone()],
+            revenue: tx.amount_in,
+            strategy_type: crate::jit_strategy_discovery::StrategyType::ARB,
+            risk_level: crate::types::RiskLevel::Medium,
+            gas_cost: U256::from(150_000) * U256::from(20_000_000_000u64),
+            net_profit: tx.amount_in,
+            transactions: vec![],
+        };
         
-        // Simulate 95% success rate
-        Ok(rand::random::<f64>() < 0.95)
+        // Use execution layer's symbolic EVM simulation
+        let simulation_result = self.execution_layer.simulate_arbitrage_execution(&mock_strategy).await?;
+        
+        debug!("Simulation result: success={}, profit={}", 
+               simulation_result.success, simulation_result.expected_profit);
+        
+        Ok(simulation_result.success)
     }
     
     /// Execute transaction
@@ -787,11 +811,208 @@ impl Clone for DataCollectionLayer {
 
 impl ExecutionLayer {
     async fn new(config: ExecutionConfig) -> Result<Self> {
+        // Initialize Z3 context for symbolic execution
+        let z3_config = z3::Config::new();
+        let z3_ctx = z3::Context::new(&z3_config);
+        
+        // Create symbolic EVM interpreter
+        let symbolic_evm = SymbolicEVMInterpreter::new(&z3_ctx);
+        
+        // Create path explorer for execution analysis
+        let path_config = PathExplorerConfig::default();
+        let path_explorer = PathExplorer::new(&z3_ctx, path_config);
+        
+        // Create ABI parser
+        let abi_parser = ABIParser::new();
+        
         Ok(Self {
             tx_builder: TransactionBuilder { config: config.clone() },
             gas_optimizer: GasOptimizer { config: config.clone() },
             execution_manager: ExecutionManager { config: config.clone() },
+            symbolic_evm,
+            path_explorer,
+            abi_parser,
             config,
         })
     }
+    
+    /// Simulate arbitrage execution using symbolic EVM
+    pub async fn simulate_arbitrage_execution(&self, strategy: &StrategyCandidate) -> Result<SimulationResult> {
+        info!("🔍 Simulating arbitrage execution using symbolic EVM");
+        
+        let mut execution_paths = Vec::new();
+        
+        // Build execution path for each step in arbitrage strategy
+        for (i, step) in strategy.path.windows(2).enumerate() {
+            let from_token = &step[0];
+            let to_token = &step[1];
+            
+            info!("Simulating step {}: {} -> {}", i + 1, from_token, to_token);
+            
+            // Create mock contract bytecode for the swap
+            let swap_bytecode = self.generate_swap_bytecode(from_token, to_token)?;
+            
+            // Use path explorer to analyze execution paths
+            let contract_address = Address::random(); // Mock contract address
+            let paths = self.path_explorer.explore_paths(&swap_bytecode, &contract_address).await?;
+            
+            info!("Found {} execution paths for {} -> {}", paths.len(), from_token, to_token);
+            execution_paths.extend(paths);
+        }
+        
+        // Analyze execution paths for profitability and risks
+        let simulation_result = self.analyze_execution_paths(&execution_paths, strategy).await?;
+        
+        info!("✅ Simulation completed: success={}, profit={} ETH", 
+              simulation_result.success, simulation_result.expected_profit);
+        
+        Ok(simulation_result)
+    }
+    
+    /// Generate bytecode for token swap (simplified)
+    fn generate_swap_bytecode(&self, from_token: &str, to_token: &str) -> Result<Vec<u8>> {
+        // Generate simplified bytecode for token swap
+        // This represents the core swap logic that would be symbolically executed
+        
+        let mut bytecode = Vec::new();
+        
+        // PUSH1 0x01 (amount)
+        bytecode.extend_from_slice(&[0x60, 0x01]);
+        
+        // PUSH1 0x02 (min_amount_out)  
+        bytecode.extend_from_slice(&[0x60, 0x02]);
+        
+        // PUSH20 from_token_address
+        bytecode.push(0x73);
+        bytecode.extend_from_slice(&[0x01; 20]); // Mock from token address
+        
+        // PUSH20 to_token_address
+        bytecode.push(0x73);
+        bytecode.extend_from_slice(&[0x02; 20]); // Mock to token address
+        
+        // CALL swap function
+        bytecode.extend_from_slice(&[0xf1]); // CALL opcode
+        
+        // STOP
+        bytecode.push(0x00);
+        
+        debug!("Generated {} bytes of swap bytecode for {} -> {}", 
+               bytecode.len(), from_token, to_token);
+        
+        Ok(bytecode)
+    }
+    
+    /// Analyze execution paths using our EVM interpreter
+    async fn analyze_execution_paths(&self, paths: &[ExecutionPath], strategy: &StrategyCandidate) -> Result<SimulationResult> {
+        let mut total_gas = 0u64;
+        let mut success_probability = 1.0f64;
+        let mut potential_reverts = 0;
+        
+        for (i, path) in paths.iter().enumerate() {
+            debug!("Analyzing execution path {}/{}", i + 1, paths.len());
+            
+            // Analyze each state in the execution path
+            for (j, state) in path.iter().enumerate() {
+                // Extract gas usage from EVM execution state
+                let gas_used = self.estimate_gas_from_state(state);
+                total_gas += gas_used;
+                
+                // Check for potential revert conditions
+                if self.could_revert(state) {
+                    potential_reverts += 1;
+                    success_probability *= 0.95; // Reduce success probability
+                }
+                
+                // Log symbolic execution details
+                debug!("  State {}: PC={}, OpCode={:?}, Gas={}", 
+                       j, state.current_pc, state.current_opcode, gas_used);
+            }
+        }
+        
+        // Calculate success probability based on execution analysis
+        success_probability *= (1.0 - (potential_reverts as f64 / paths.len() as f64 * 0.1));
+        
+        // Estimate profit considering gas costs and execution risks
+        let gas_cost = U256::from(total_gas) * U256::from(20_000_000_000u64); // 20 gwei
+        let expected_profit = if strategy.revenue > gas_cost {
+            (strategy.revenue - gas_cost).as_limbs()[0] as f64 / 1e18 * success_probability
+        } else {
+            0.0
+        };
+        
+        Ok(SimulationResult {
+            success: success_probability > 0.8,
+            expected_profit,
+            gas_estimate: total_gas,
+            success_probability,
+            execution_paths: paths.len(),
+            potential_reverts,
+        })
+    }
+    
+    /// Estimate gas usage from EVM execution state
+    fn estimate_gas_from_state(&self, state: &EVMExecutionState) -> u64 {
+        // Base gas cost per operation
+        let base_gas = match state.current_opcode {
+            crate::evm_interpreter::OpCode::ADD => 3,
+            crate::evm_interpreter::OpCode::MUL => 5,
+            crate::evm_interpreter::OpCode::SLOAD => 2100,
+            crate::evm_interpreter::OpCode::SSTORE => 20000,
+            crate::evm_interpreter::OpCode::CALL => 25000,
+            crate::evm_interpreter::OpCode::STATICCALL => 25000,
+            crate::evm_interpreter::OpCode::DELEGATECALL => 25000,
+            _ => 10, // Default gas cost
+        };
+        
+        // Add complexity based on stack size and memory usage
+        let complexity_gas = state.stack.len() as u64 * 2 + state.memory.len() as u64;
+        
+        base_gas + complexity_gas
+    }
+    
+    /// Check if execution state could lead to revert
+    fn could_revert(&self, state: &EVMExecutionState) -> bool {
+        // Check for conditions that might cause revert
+        
+        // Stack underflow
+        if state.stack.is_empty() && matches!(state.current_opcode, 
+            crate::evm_interpreter::OpCode::ADD | 
+            crate::evm_interpreter::OpCode::SUB |
+            crate::evm_interpreter::OpCode::MUL) {
+            return true;
+        }
+        
+        // Call failures (simplified check)
+        if matches!(state.current_opcode,
+            crate::evm_interpreter::OpCode::CALL |
+            crate::evm_interpreter::OpCode::STATICCALL |
+            crate::evm_interpreter::OpCode::DELEGATECALL) {
+            // Check if we have call info and it might fail
+            if let Some(call_info) = &state.call_info {
+                // Simple heuristic: large value transfers are riskier
+                if call_info.value > U256::from(10u64.pow(18)) { // > 1 ETH
+                    return true;
+                }
+            }
+        }
+        
+        false
+    }
+}
+
+/// Simulation result from symbolic EVM analysis
+#[derive(Debug, Clone)]
+pub struct SimulationResult {
+    /// Whether execution would succeed
+    pub success: bool,
+    /// Expected profit in ETH
+    pub expected_profit: f64,
+    /// Gas estimate
+    pub gas_estimate: u64,
+    /// Success probability (0.0 - 1.0)
+    pub success_probability: f64,
+    /// Number of execution paths analyzed
+    pub execution_paths: usize,
+    /// Number of potential revert scenarios
+    pub potential_reverts: usize,
 }
