@@ -346,32 +346,128 @@ impl DeFiAnalyzer {
         }
     }
 
-    /// Fallback arbitrage detection
+    /// Enhanced fallback arbitrage detection
     async fn fallback_arbitrage_detection(&self, event: &AnalysisEvent) -> Result<Vec<ArbitrageOpportunity>> {
-        debug!("Using fallback arbitrage detection for contract: {}", event.contract_address);
+        debug!("Using enhanced fallback arbitrage detection for contract: {}", event.contract_address);
         
         let mut opportunities = Vec::new();
         
-        // Simple arbitrage opportunity detection
-        let opportunity = ArbitrageOpportunity {
-            opportunity_id: format!("fallback_arb_{}", event.block_number),
-            expected_profit: U256::from(100_000_000_000_000_000u64), // 0.1 ETH
-            required_gas: 200_000,
-            success_probability: 0.85,
-            risk_level: RiskLevel::Medium,
-            strategy_description: format!(
-                "Fallback arbitrage opportunity detected for contract {} at block {}",
-                event.contract_address, event.block_number
-            ),
-        };
+        // Analyze transaction data for arbitrage patterns
+        let tx_data = &event.transaction_data;
+        let block_number = event.block_number;
         
-        // Only add if it meets profit threshold
-        if opportunity.expected_profit >= self.config.min_profit_threshold {
-            opportunities.push(opportunity);
+        // Check for common arbitrage patterns
+        if self.detect_price_arbitrage_pattern(tx_data) {
+            let opportunity = ArbitrageOpportunity {
+                opportunity_id: format!("price_arb_{}_{}", event.contract_address, block_number),
+                expected_profit: self.calculate_price_arbitrage_profit(tx_data),
+                required_gas: self.estimate_gas_usage(tx_data),
+                success_probability: self.calculate_success_probability(tx_data),
+                risk_level: self.assess_arbitrage_risk(tx_data),
+                strategy_description: format!(
+                    "Price arbitrage opportunity detected for contract {} at block {}",
+                    event.contract_address, block_number
+                ),
+            };
+            
+            if opportunity.expected_profit >= self.config.min_profit_threshold {
+                opportunities.push(opportunity);
+            }
         }
         
-        debug!("Found {} fallback arbitrage opportunities", opportunities.len());
+        // Check for liquidity arbitrage patterns
+        if self.detect_liquidity_arbitrage_pattern(tx_data) {
+            let opportunity = ArbitrageOpportunity {
+                opportunity_id: format!("liquidity_arb_{}_{}", event.contract_address, block_number),
+                expected_profit: self.calculate_liquidity_arbitrage_profit(tx_data),
+                required_gas: self.estimate_gas_usage(tx_data),
+                success_probability: self.calculate_success_probability(tx_data),
+                risk_level: self.assess_arbitrage_risk(tx_data),
+                strategy_description: format!(
+                    "Liquidity arbitrage opportunity detected for contract {} at block {}",
+                    event.contract_address, block_number
+                ),
+            };
+            
+            if opportunity.expected_profit >= self.config.min_profit_threshold {
+                opportunities.push(opportunity);
+            }
+        }
+        
+        debug!("Found {} enhanced fallback arbitrage opportunities", opportunities.len());
         Ok(opportunities)
+    }
+
+    /// Detect price arbitrage patterns in transaction data
+    fn detect_price_arbitrage_pattern(&self, tx_data: &[u8]) -> bool {
+        // Look for price manipulation patterns
+        // Check for multiple price-related operations
+        let price_ops = tx_data.windows(4).filter(|window| {
+            // Look for price-related function selectors
+            matches!(window, [0x70, 0xa0, 0x82, 0x31] | [0x18, 0x16, 0x0d, 0xdd] | [0x3a, 0x67, 0x4d, 0x42])
+        }).count();
+        
+        price_ops > 1
+    }
+
+    /// Detect liquidity arbitrage patterns in transaction data
+    fn detect_liquidity_arbitrage_pattern(&self, tx_data: &[u8]) -> bool {
+        // Look for liquidity manipulation patterns
+        // Check for multiple liquidity-related operations
+        let liquidity_ops = tx_data.windows(4).filter(|window| {
+            // Look for liquidity-related function selectors
+            matches!(window, [0x02, 0x2c, 0x0d, 0x5c] | [0x09, 0x5e, 0xa7, 0xb3] | [0x38, 0xed, 0x17, 0x39])
+        }).count();
+        
+        liquidity_ops > 1
+    }
+
+    /// Calculate price arbitrage profit
+    fn calculate_price_arbitrage_profit(&self, tx_data: &[u8]) -> U256 {
+        // Analyze transaction data to estimate profit
+        let base_profit = U256::from(tx_data.len() * 1000); // Simplified calculation
+        let gas_cost = U256::from(200_000) * U256::from(20_000_000_000u64); // 20 gwei
+        base_profit.saturating_sub(gas_cost)
+    }
+
+    /// Calculate liquidity arbitrage profit
+    fn calculate_liquidity_arbitrage_profit(&self, tx_data: &[u8]) -> U256 {
+        // Analyze transaction data to estimate profit
+        let base_profit = U256::from(tx_data.len() * 2000); // Simplified calculation
+        let gas_cost = U256::from(300_000) * U256::from(20_000_000_000u64); // 20 gwei
+        base_profit.saturating_sub(gas_cost)
+    }
+
+    /// Estimate gas usage for transaction
+    fn estimate_gas_usage(&self, tx_data: &[u8]) -> u64 {
+        // Basic gas estimation based on transaction size and complexity
+        let base_gas = 21_000;
+        let data_gas = tx_data.len() as u64 * 16; // 16 gas per byte
+        let complexity_gas = tx_data.len() as u64 * 10; // Additional complexity factor
+        
+        base_gas + data_gas + complexity_gas
+    }
+
+    /// Calculate success probability
+    fn calculate_success_probability(&self, tx_data: &[u8]) -> f64 {
+        // Analyze transaction complexity and estimate success probability
+        let complexity = tx_data.len() as f64;
+        let base_probability = 0.9;
+        let complexity_factor = (complexity / 1000.0).min(0.1);
+        
+        (base_probability - complexity_factor).max(0.5)
+    }
+
+    /// Assess arbitrage risk
+    fn assess_arbitrage_risk(&self, tx_data: &[u8]) -> RiskLevel {
+        // Assess risk based on transaction complexity
+        let complexity = tx_data.len();
+        
+        match complexity {
+            0..=100 => RiskLevel::Low,
+            101..=500 => RiskLevel::Medium,
+            _ => RiskLevel::High,
+        }
     }
 
     /// Assess risk

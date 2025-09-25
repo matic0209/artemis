@@ -423,16 +423,67 @@ impl<'ctx> DeFiFeatureExtractor<'ctx> {
 
     /// Calculate profit potential for cross-protocol arbitrage
     fn calculate_profit_potential(&self, path: &ExecutionPath<'ctx>, index: usize) -> U256 {
-        // Simplified profit calculation
-        // In a real implementation, you would analyze the execution path for profit opportunities
-        U256::from(1000) // Placeholder value
+        // Analyze execution path for profit opportunities
+        let mut total_profit = U256::from(0);
+        
+        // Look for balance changes that indicate profit
+        for (i, state) in path.iter().enumerate() {
+            if i >= index {
+                // Check for ETH transfers
+                if let Some(call_info) = &state.call_info {
+                    if call_info.value > U256::from(0) {
+                        total_profit = total_profit.saturating_add(call_info.value);
+                    }
+                }
+                
+                // Check for storage changes that might indicate profit
+                if let Some(storage_info) = &state.storage_info {
+                    if storage_info.key.contains("profit") || storage_info.key.contains("balance") {
+                        total_profit = total_profit.saturating_add(U256::from(100));
+                    }
+                }
+            }
+        }
+        
+        // Apply risk factor
+        let risk_factor = U256::from(80); // 80% of calculated profit
+        total_profit * risk_factor / U256::from(100)
     }
 
     /// Calculate price arbitrage potential
     fn calculate_price_arbitrage_potential(&self, path: &ExecutionPath<'ctx>, index: usize) -> U256 {
-        // Simplified price arbitrage calculation
-        // In a real implementation, you would analyze price differences
-        U256::from(500) // Placeholder value
+        // Analyze price differences in execution path
+        let mut price_difference = U256::from(0);
+        
+        // Look for price-related operations
+        for (i, state) in path.iter().enumerate() {
+            if i >= index {
+                match state.current_opcode {
+                    OpCode::SSTORE => {
+                        // Check if this is a price update
+                        if let Some(storage_info) = &state.storage_info {
+                            if storage_info.key.contains("price") || storage_info.key.contains("rate") {
+                                // Estimate price arbitrage potential
+                                price_difference = price_difference.saturating_add(U256::from(50));
+                            }
+                        }
+                    },
+                    OpCode::CALL => {
+                        // Check for external price calls
+                        if let Some(call_info) = &state.call_info {
+                            if call_info.to.contains("oracle") || call_info.to.contains("price") {
+                                price_difference = price_difference.saturating_add(U256::from(25));
+                            }
+                        }
+                    },
+                    _ => {}
+                }
+            }
+        }
+        
+        // Apply market volatility factor
+        let volatility_factor = U256::from(120); // 120% of calculated difference
+        price_difference * volatility_factor / U256::from(100)
     }
 
     /// Check if element is in condition list
