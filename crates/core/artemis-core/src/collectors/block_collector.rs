@@ -51,9 +51,9 @@ where
             if let Ok(mut stream) = provider.subscribe_blocks().await {
                 loop {
                     match stream.recv().await {
-                        Ok(Some(block)) => {
+                        Ok(block) => {
                             let hash = block.hash;
-                            let number = U64::from(block.header.number);
+                            let number = U64::from(block.number);
                             let new_block = NewBlock { 
                                 hash, 
                                 number
@@ -67,7 +67,6 @@ where
                             // metrics::counter!("artemis.collectors.blocks.processed").increment(1);
                             // metrics::gauge!("artemis.collectors.blocks.latest_number").set(number as f64);
                         },
-                        Ok(None) => break,
                         Err(_) => break,
                     }
                 }

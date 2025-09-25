@@ -114,8 +114,12 @@ impl ZeroCopySerializer {
     }
 
     /// 批量序列化事件
-    pub fn serialize_events_batch(events: &[ZeroCopyEvent]) -> Result<Vec<AlignedVec>, rkyv::ser::serializers::AllocSerializer<256>> {
-        events.iter().map(Self::serialize_event).collect()
+    pub fn serialize_events_batch(events: &[ZeroCopyEvent]) -> Result<Vec<AlignedVec>, Box<dyn std::error::Error>> {
+        let mut results = Vec::new();
+        for event in events {
+            results.push(Self::serialize_event(event)?);
+        }
+        Ok(results)
     }
 
     /// 批量反序列化事件

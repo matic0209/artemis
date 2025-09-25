@@ -19,25 +19,37 @@ pub use mev_arbitrage_graph::{
     StateSnapshot,
     ArbitrageCycle,
     ArbitragePath,
+    AnalysisEvent,
+    AnalysisAction,
+    ArbitrageOpportunity,
+    RiskLevel,
+    DeFiResult,
+    DeFiAnalyzerError,
 };
+
 pub use mev_arbitrage_symbolic::{
     SymbolicEVMInterpreter,
-    ABIParser,
-    PathExplorer,
+    SEVM,
     ExecutionPath,
     ExecutionPathList,
+    EVMExecutionState,
+    ABIParser,
+    PathExplorer,
 };
+
 pub use mev_arbitrage_revm::{
     RevmValidationEngine,
     RevmConfig,
     ValidationResult,
     StrategyValidationRequest,
 };
+
 pub use mev_arbitrage_defense::{
     MEVDefenseEngine,
     DefenseConfig,
     SandwichDetector,
     FrontrunProtector,
+    UserTransactionProtector,
 };
 
 // Artemis 集成
@@ -56,38 +68,10 @@ use artemis_core::{
 };
 
 /// MEV 套利事件
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MEVArbitrageEvent {
-    /// 事件类型
-    pub event_type: String,
-    /// 区块号
-    pub block_number: u64,
-    /// 交易哈希
-    pub tx_hash: String,
-    /// 合约地址
-    pub contract_address: Address,
-    /// 事件数据
-    pub data: Bytes,
-    /// 时间戳
-    pub timestamp: u64,
-}
+pub type MEVArbitrageEvent = AnalysisEvent;
 
 /// MEV 套利动作
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MEVArbitrageAction {
-    /// 动作类型
-    pub action_type: String,
-    /// 目标合约
-    pub target_contract: Address,
-    /// 输入数据
-    pub input_data: Bytes,
-    /// 预期利润
-    pub expected_profit: U256,
-    /// 最大 gas 价格
-    pub max_gas_price: U256,
-    /// 优先级
-    pub priority: u32,
-}
+pub type MEVArbitrageAction = AnalysisAction;
 
 /// 完整的 MEV 套利策略
 pub struct CompleteMEVArbitrageStrategy {
@@ -122,6 +106,40 @@ pub struct MEVArbitrageConfig {
     pub timeout_seconds: u64,
 }
 
+/// JIT 配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JITConfig {
+    pub max_paths: usize,
+    pub timeout_ms: u64,
+}
+
+impl Default for JITConfig {
+    fn default() -> Self {
+        Self {
+            max_paths: 1000,
+            timeout_ms: 300,
+        }
+    }
+}
+
+/// 防守配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DefenseConfig {
+    pub sandwich_protection: bool,
+    pub frontrun_protection: bool,
+    pub user_protection: bool,
+}
+
+impl Default for DefenseConfig {
+    fn default() -> Self {
+        Self {
+            sandwich_protection: true,
+            frontrun_protection: true,
+            user_protection: true,
+        }
+    }
+}
+
 /// MEV 套利统计
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MEVArbitrageStats {
@@ -137,6 +155,19 @@ pub struct MEVArbitrageStats {
     pub total_profit: U256,
     /// 平均执行时间（毫秒）
     pub avg_execution_time_ms: u64,
+}
+
+impl Default for MEVArbitrageStats {
+    fn default() -> Self {
+        Self {
+            blocks_processed: 0,
+            arbitrage_opportunities: 0,
+            successful_strategies: 0,
+            defense_triggers: 0,
+            total_profit: U256::ZERO,
+            avg_execution_time_ms: 0,
+        }
+    }
 }
 
 impl CompleteMEVArbitrageStrategy {
@@ -249,19 +280,6 @@ pub async fn setup_complete_artemis_mev_arbitrage(
         .with_executor(mempool_executor);
     
     Ok(engine)
-}
-
-impl Default for MEVArbitrageStats {
-    fn default() -> Self {
-        Self {
-            blocks_processed: 0,
-            arbitrage_opportunities: 0,
-            successful_strategies: 0,
-            defense_triggers: 0,
-            total_profit: U256::ZERO,
-            avg_execution_time_ms: 0,
-        }
-    }
 }
 
 #[cfg(test)]
