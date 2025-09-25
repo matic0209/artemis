@@ -3,11 +3,12 @@
 use std::sync::Arc;
 use rkyv::{Archive, Deserialize, Serialize, archived_root, to_bytes, AlignedVec};
 use bytecheck::CheckBytes;
+use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
 
 use crate::eth::{Address, U256};
 
 /// 零拷贝事件
-#[derive(Archive, Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Archive, Deserialize, Serialize, Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[archive(compare(PartialEq), check_bytes)]
 pub struct ZeroCopyEvent {
     /// 事件类型
@@ -27,7 +28,7 @@ pub struct ZeroCopyEvent {
 }
 
 /// 零拷贝动作
-#[derive(Archive, Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Archive, Deserialize, Serialize, Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[archive(compare(PartialEq), check_bytes)]
 pub struct ZeroCopyAction {
     /// 动作类型
@@ -93,8 +94,8 @@ pub struct ZeroCopySerializer;
 
 impl ZeroCopySerializer {
     /// 序列化事件
-    pub fn serialize_event(event: &ZeroCopyEvent) -> Result<AlignedVec, rkyv::ser::serializers::AllocSerializer<256>> {
-        to_bytes::<_, 256>(event)
+    pub fn serialize_event(event: &ZeroCopyEvent) -> Result<AlignedVec, Box<dyn std::error::Error>> {
+        to_bytes::<_, 256>(event).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     }
 
     /// 反序列化事件
@@ -103,8 +104,8 @@ impl ZeroCopySerializer {
     }
 
     /// 序列化动作
-    pub fn serialize_action(action: &ZeroCopyAction) -> Result<AlignedVec, rkyv::ser::serializers::AllocSerializer<256>> {
-        to_bytes::<_, 256>(action)
+    pub fn serialize_action(action: &ZeroCopyAction) -> Result<AlignedVec, Box<dyn std::error::Error>> {
+        to_bytes::<_, 256>(action).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     }
 
     /// 反序列化动作
@@ -214,12 +215,14 @@ impl ZeroCopyStreamProcessor {
 
         for event in events {
             // 序列化事件
-            let serialized = ZeroCopySerializer::serialize_event(&event)?;
+            let serialized = ZeroCopySerializer::serialize_event(&event)
+                .map_err(|e| anyhow::anyhow!("Serialization failed: {:?}", e))?;
             self.stats.serializations += 1;
             self.stats.bytes_processed += serialized.len() as u64;
 
             // 零拷贝反序列化
-            let archived_event = ZeroCopySerializer::deserialize_event(&serialized)?;
+            let archived_event = ZeroCopySerializer::deserialize_event(&serialized)
+                .map_err(|e| anyhow::anyhow!("Deserialization failed: {:?}", e))?;
             self.stats.deserializations += 1;
             self.stats.copies_saved += 1; // 避免了一次拷贝
 

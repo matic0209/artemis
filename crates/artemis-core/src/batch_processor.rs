@@ -202,17 +202,16 @@ impl StreamBatchProcessor {
         F: Fn(Vec<T>) -> Fut + Send + Sync + Clone + 'static,
         Fut: std::future::Future<Output = Result<(), BatchError>> + Send,
     {
-        use futures::stream::StreamExt;
+        use futures::StreamExt as FuturesStreamExt;
         
-        batches
-            .map(|batch| {
+        tokio_stream::StreamExt::map(batches, |batch| {
                 let processor = processor.clone();
                 async move {
                     processor(batch).await
                 }
             })
             .buffer_unordered(max_concurrency)
-            .for_each(|result| async {
+            .for_each(|result| async move {
                 if let Err(e) = result {
                     error!("Batch processing error: {:?}", e);
                 }

@@ -49,21 +49,27 @@ where
         tokio::spawn(async move {
             // Subscribe to new blocks using Alloy provider
             if let Ok(mut stream) = provider.subscribe_blocks().await {
-                while let Some(block) = stream.next().await {
-                    let hash = block.hash;
-                    let number = U64::from(block.header.number);
-                    let new_block = NewBlock { 
-                        hash, 
-                        number
-                    };
-                    
-                    if tx.send(new_block).await.is_err() {
-                        break;
+                loop {
+                    match stream.recv().await {
+                        Ok(Some(block)) => {
+                            let hash = block.hash;
+                            let number = U64::from(block.header.number);
+                            let new_block = NewBlock { 
+                                hash, 
+                                number
+                            };
+                            
+                            if tx.send(new_block).await.is_err() {
+                                break;
+                            }
+                            
+                            // TODO: Add metrics back when metrics crate is properly configured
+                            // metrics::counter!("artemis.collectors.blocks.processed").increment(1);
+                            // metrics::gauge!("artemis.collectors.blocks.latest_number").set(number as f64);
+                        },
+                        Ok(None) => break,
+                        Err(_) => break,
                     }
-                    
-                    // TODO: Add metrics back when metrics crate is properly configured
-                    // metrics::counter!("artemis.collectors.blocks.processed").increment(1);
-                    // metrics::gauge!("artemis.collectors.blocks.latest_number").set(number as f64);
                 }
             }
         });

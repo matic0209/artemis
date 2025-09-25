@@ -426,7 +426,7 @@ impl MonitoringManager {
             score -= 50.0;
         }
         
-        score.max(0.0)
+        f64::max(score, 0.0)
     }
 }
 

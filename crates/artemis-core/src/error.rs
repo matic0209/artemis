@@ -7,16 +7,16 @@ use anyhow::Context;
 use thiserror::Error;
 
 /// Main error type for Artemis operations
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum ArtemisError {
     #[error("Configuration error: {0}")]
     Config(String),
     
     #[error("Network error: {0}")]
-    Network(#[from] reqwest::Error),
+    Network(String),
     
     #[error("JSON-RPC error: {0}")]
-    JsonRpc(#[from] jsonrpsee::core::Error),
+    JsonRpc(String),
     
     #[error("Provider error: {0}")]
     Provider(String),
@@ -46,13 +46,13 @@ pub enum ArtemisError {
     Validation(String),
     
     #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(String),
     
     #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
+    Serialization(String),
     
     #[error("CSV parsing error: {0}")]
-    Csv(#[from] csv::Error),
+    Csv(String),
     
     #[error("Alloy provider error: {0}")]
     AlloyProvider(String),
@@ -152,7 +152,10 @@ where
     where
         F: FnOnce(&E) -> String,
     {
-        self.map_err(|e| anyhow::Error::new(e).context(f(&e)))
+        self.map_err(|e| {
+            let context = f(&e);
+            anyhow::Error::new(e).context(context)
+        })
     }
 }
 

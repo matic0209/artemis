@@ -14,34 +14,20 @@ use anyhow::Result;
 use tokio_stream::{Stream, StreamExt};
 use tracing::{info, debug, warn, error};
 
-// Artemis integration (commented due to build issues, but interface-ready)
-// use artemis_core::{
-//     types::{Collector, Executor, Strategy, CollectorStream},
-//     engine::Engine,
-//     collectors::{
-//         block_collector::{BlockCollector, NewBlock},
-//         log_collector::{LogCollector, Log}, 
-//         mempool_collector::{MempoolCollector, PendingTx},
-//     },
-//     executors::{
-//         flashbots_alloy_executor::{FlashbotsAlloyExecutor, FlashbotsAlloyBundle},
-//         mempool_alloy_executor::{MempoolAlloyExecutor, SubmitTxToMempool},
-//     },
-// };
-
-// Mock Artemis types for interface compatibility
-pub trait Strategy<E, A>: Send + Sync {
-    async fn sync_state(&mut self) -> Result<()>;
-    async fn process_event(&mut self, event: E) -> Vec<A>;
-}
-
-pub trait Collector<E>: Send + Sync {
-    async fn get_event_stream(&self) -> Result<Pin<Box<dyn Stream<Item = E> + Send + '_>>>;
-}
-
-pub trait Executor<A>: Send + Sync {
-    async fn execute(&self, action: A) -> Result<()>;
-}
+// Full Artemis integration (working with fixed artemis-core)
+use artemis_core::{
+    types::{Collector, Executor, Strategy, CollectorStream},
+    engine::Engine,
+    collectors::{
+        block_collector::{BlockCollector, NewBlock},
+        log_collector::{LogCollector, Log}, 
+        mempool_collector::{MempoolCollector, PendingTx},
+    },
+    executors::{
+        flashbots_alloy_executor::{FlashbotsAlloyExecutor, FlashbotsAlloyBundle},
+        mempool_alloy_executor::{MempoolAlloyExecutor, SubmitTxToMempool},
+    },
+};
 
 use crate::{
     types::{AnalysisEvent, AnalysisAction, ActionType, RiskLevel},

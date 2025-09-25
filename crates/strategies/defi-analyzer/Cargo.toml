@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# Artemis integration (commented due to artemis-core build issues)
-# artemis-core = { path = "../../artemis-core" }
+# Artemis integration (enable with working interface)
+artemis-core = { path = "../../artemis-core" }
 
 # Core dependencies (match artemis-core versions)
 async-trait = "0.1.64"
