@@ -2162,6 +2162,7 @@ dependencies = [
  "sha3",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-stream",
  "tracing",
  "uuid 1.18.1",
  "z3",

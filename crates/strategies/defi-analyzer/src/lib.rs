@@ -15,6 +15,8 @@ pub mod evm_interpreter;
 pub mod abi_parser;
 pub mod defi_feature_extractor;
 pub mod path_explorer;
+pub mod collectors;
+pub mod executors;
 pub mod tests;
 
 // Re-export main components
@@ -29,3 +31,5 @@ pub use evm_interpreter::{SEVM, SymbolicEVMInterpreter, EVMExecutionState, Execu
 pub use abi_parser::{ABIParser, ABIElement};
 pub use defi_feature_extractor::{DeFiFeatureExtractor, DeFiFeature};
 pub use path_explorer::{PathExplorer, PathExplorerConfig, PathExplorerStats};
+pub use collectors::{DeFiBlockCollector, DeFiLogCollector, DeFiMempoolCollector, DeFiCollectorConfig};
+pub use executors::{DeFiMempoolExecutor, DeFiFlashbotsExecutor, DeFiExecutorConfig, DeFiExecutorFactory};

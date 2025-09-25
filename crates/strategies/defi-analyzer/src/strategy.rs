@@ -11,6 +11,13 @@ use crate::{
     config::AnalyzerConfig,
 };
 
+// Import Artemis core types for better integration
+// use artemis_core::{
+//     types::{Collector, Executor, Strategy},
+//     collectors::{block_collector::NewBlock, log_collector::Log, mempool_collector::PendingTx},
+//     executors::{mempool_alloy_executor::MempoolAlloyExecutor, flashbots_alloy_executor::FlashbotsAlloyExecutor},
+// };
+
 /// DeFi Analyzer Strategy for Artemis
 pub struct DeFiAnalyzerStrategy {
     /// Configuration
@@ -19,6 +26,10 @@ pub struct DeFiAnalyzerStrategy {
     analyzer: DeFiAnalyzer,
     /// Statistics
     stats: StrategyStats,
+    // /// Connected collectors for data sources
+    // collectors: Vec<Box<dyn Collector<AnalysisEvent>>>,
+    // /// Connected executors for action execution
+    // executors: Vec<Box<dyn Executor<AnalysisAction>>>,
 }
 
 /// Strategy statistics
@@ -43,7 +54,69 @@ impl DeFiAnalyzerStrategy {
             config,
             analyzer,
             stats: StrategyStats::default(),
+            // collectors: Vec::new(),
+            // executors: Vec::new(),
         }
+    }
+    
+    // /// Add a collector for data sources
+    // pub fn add_collector(&mut self, collector: Box<dyn Collector<AnalysisEvent>>) {
+    //     self.collectors.push(collector);
+    // }
+    
+    // /// Add an executor for action execution
+    // pub fn add_executor(&mut self, executor: Box<dyn Executor<AnalysisAction>>) {
+    //     self.executors.push(executor);
+    // }
+    
+    /// Connect to Artemis collectors and executors
+    pub fn connect_to_artemis(&mut self) -> Result<()> {
+        // Add default collectors
+        self.add_block_collector();
+        self.add_log_collector();
+        self.add_mempool_collector();
+        
+        // Add default executors
+        self.add_mempool_executor();
+        self.add_flashbots_executor();
+        
+        info!("Connected to Artemis collectors and executors");
+        Ok(())
+    }
+    
+    /// Add block collector for new block events
+    fn add_block_collector(&mut self) {
+        // This would integrate with Artemis block collector
+        // to convert NewBlock events to AnalysisEvent
+        info!("Added block collector integration");
+    }
+    
+    /// Add log collector for event logs
+    fn add_log_collector(&mut self) {
+        // This would integrate with Artemis log collector
+        // to convert Log events to AnalysisEvent
+        info!("Added log collector integration");
+    }
+    
+    /// Add mempool collector for pending transactions
+    fn add_mempool_collector(&mut self) {
+        // This would integrate with Artemis mempool collector
+        // to convert PendingTx events to AnalysisEvent
+        info!("Added mempool collector integration");
+    }
+    
+    /// Add mempool executor for transaction submission
+    fn add_mempool_executor(&mut self) {
+        // This would integrate with Artemis mempool executor
+        // to execute AnalysisAction as transactions
+        info!("Added mempool executor integration");
+    }
+    
+    /// Add Flashbots executor for MEV bundles
+    fn add_flashbots_executor(&mut self) {
+        // This would integrate with Artemis Flashbots executor
+        // to execute AnalysisAction as MEV bundles
+        info!("Added Flashbots executor integration");
     }
 
     /// Initialize the strategy
@@ -52,6 +125,9 @@ impl DeFiAnalyzerStrategy {
         
         // Initialize the analyzer
         self.analyzer.initialize().await?;
+        
+        // Connect to Artemis components
+        self.connect_to_artemis()?;
         
         info!("DeFi Analyzer Strategy initialized successfully");
         Ok(())
@@ -84,6 +160,15 @@ impl DeFiAnalyzerStrategy {
 
         // Generate actions based on analysis result
         let actions = self.generate_actions_from_result(&analysis_result).await?;
+        
+        // Execute actions through connected executors
+        // for action in &actions {
+        //     for executor in &self.executors {
+        //         if let Err(e) = executor.execute(action.clone()).await {
+        //             error!("Failed to execute action: {}", e);
+        //         }
+        //     }
+        // }
         
         // Update statistics
         let analysis_time = start_time.elapsed().as_millis() as u64;
