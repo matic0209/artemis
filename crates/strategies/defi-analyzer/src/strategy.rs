@@ -10,6 +10,7 @@ use crate::{
     types::{AnalysisEvent, AnalysisAction, AnalysisResult, ArbitrageOpportunity},
     config::AnalyzerConfig,
     negative_cycle_arbitrage::{NegativeCycleArbitrageEngine, NegativeCycleConfig, StateSnapshot},
+    jit_strategy_discovery::{JITStrategyDiscoveryEngine, JITConfig, DeFiAction, StrategyCandidate},
 };
 
 // Import Artemis core types for better integration
@@ -27,6 +28,8 @@ pub struct DeFiAnalyzerStrategy {
     analyzer: DeFiAnalyzer,
     /// Negative cycle arbitrage engine
     negative_cycle_engine: NegativeCycleArbitrageEngine,
+    /// JIT strategy discovery engine
+    jit_engine: JITStrategyDiscoveryEngine,
     /// Statistics
     stats: StrategyStats,
     // /// Connected collectors for data sources
@@ -50,7 +53,7 @@ pub struct StrategyStats {
 
 impl DeFiAnalyzerStrategy {
     /// Create a new DeFi Analyzer Strategy
-    pub fn new(config: AnalyzerConfig) -> Self {
+    pub fn new(config: AnalyzerConfig) -> Result<Self> {
         let analyzer = DeFiAnalyzer::new(config.clone());
         
         // Create negative cycle arbitrage engine with default config
@@ -69,14 +72,27 @@ impl DeFiAnalyzerStrategy {
         };
         let negative_cycle_engine = NegativeCycleArbitrageEngine::new(arbitrage_config);
         
-        Self {
+        // Create JIT strategy discovery engine
+        let jit_config = JITConfig {
+            base_asset: "WETH".to_string(),
+            target_min: config.min_profit_threshold,
+            time_budget: std::time::Duration::from_millis(500),
+            max_path_length: 5,
+            gas_price: U256::from(20_000_000_000u64),
+            ..Default::default()
+        };
+        let jit_engine = JITStrategyDiscoveryEngine::new(jit_config)
+            .map_err(|e| anyhow::anyhow!("Failed to create JIT engine: {}", e))?;
+        
+        Ok(Self {
             config,
             analyzer,
             negative_cycle_engine,
+            jit_engine,
             stats: StrategyStats::default(),
             // collectors: Vec::new(),
             // executors: Vec::new(),
-        }
+        })
     }
     
     // /// Add a collector for data sources
@@ -162,32 +178,34 @@ impl DeFiAnalyzerStrategy {
         // First run standard analysis
         let analysis_result = self.analyzer.analyze_event(&event).await?;
         
-        // Then run negative cycle arbitrage analysis
-        let state_snapshot = StateSnapshot::from_analysis_event(&event);
-        let arbitrage_revenue = self.negative_cycle_engine.execute_arbitrage_algorithm(&state_snapshot).await.unwrap_or(U256::ZERO);
+        // Then run JIT strategy discovery (includes negative cycle arbitrage)
+        let defi_actions = self.extract_defi_actions_from_event(&event)?;
+        let jit_strategy = self.jit_engine.jit_strategy_discovery(event.block_number, &defi_actions).await.unwrap_or(None);
         
-        // Create additional arbitrage actions if profitable
+        // Create additional actions from JIT strategy if profitable
         let mut additional_actions = Vec::new();
-        if arbitrage_revenue > self.config.min_profit_threshold {
-            info!("Negative cycle arbitrage opportunity found: {} ETH", arbitrage_revenue);
+        if let Some(strategy) = jit_strategy {
+            info!("JIT strategy discovered: {} ({:?})", strategy.net_profit, strategy.strategy_type);
             
-            additional_actions.push(AnalysisAction {
-                action_id: format!("negative_cycle_arb_{}", event.block_number),
-                action_type: crate::types::ActionType::ArbitrageExecution,
-                target_address: event.contract_address,
-                calldata: vec![], // Would be populated with actual arbitrage calls
-                value: U256::ZERO,
-                gas_limit: 500_000,
-                gas_price: 20_000_000_000,
-                nonce: 0,
-                chain_id: 1,
-                expected_profit: arbitrage_revenue,
-                risk_level: crate::types::RiskLevel::Medium,
-                target_block: event.block_number + 1,
-                min_timestamp: event.timestamp,
-                max_timestamp: event.timestamp + 12, // 12 seconds
-                metadata: HashMap::new(),
-            });
+            for tx in &strategy.transactions {
+                additional_actions.push(AnalysisAction {
+                    action_id: format!("jit_{}_{}", strategy.strategy_type == crate::jit_strategy_discovery::StrategyType::ARB, event.block_number),
+                    action_type: crate::types::ActionType::ArbitrageExecution,
+                    target_address: tx.to.into(),
+                    calldata: tx.data.to_vec(),
+                    value: tx.value,
+                    gas_limit: tx.gas_limit,
+                    gas_price: 20_000_000_000,
+                    nonce: 0,
+                    chain_id: 1,
+                    expected_profit: strategy.revenue,
+                    risk_level: strategy.risk_level,
+                    target_block: event.block_number + 1,
+                    min_timestamp: event.timestamp,
+                    max_timestamp: event.timestamp + 12,
+                    metadata: HashMap::new(),
+                });
+            }
         }
         
         // Combine results
@@ -217,6 +235,62 @@ impl DeFiAnalyzerStrategy {
         }
 
         info!("Analysis completed in {}ms, generated {} actions", analysis_time, actions.len());
+        
+        Ok(actions)
+    }
+    
+    /// Extract DeFi actions from analysis event
+    fn extract_defi_actions_from_event(&self, event: &AnalysisEvent) -> Result<Vec<DeFiAction>> {
+        let mut actions = Vec::new();
+        
+        // Parse transaction data to extract DeFi actions
+        if event.transaction_data.len() >= 4 {
+            let selector = [
+                event.transaction_data[0],
+                event.transaction_data[1], 
+                event.transaction_data[2],
+                event.transaction_data[3]
+            ];
+            
+            // Common DeFi function selectors
+            let defi_action = match selector {
+                [0xa9, 0x05, 0x9c, 0xbb] => Some(DeFiAction {
+                    id: "swap_exact_tokens_for_tokens".to_string(),
+                    action_type: "swap".to_string(),
+                    inputs: vec!["token_in".to_string()],
+                    outputs: vec!["token_out".to_string()],
+                    protocol: "uniswap_v2".to_string(),
+                    key_dependencies: ["token_in_balance".to_string(), "token_out_balance".to_string()].into_iter().collect(),
+                    selector,
+                    contract: event.contract_address.into(),
+                }),
+                [0x38, 0xed, 0x17, 0x39] => Some(DeFiAction {
+                    id: "swap_exact_eth_for_tokens".to_string(),
+                    action_type: "swap".to_string(),
+                    inputs: vec!["WETH".to_string()],
+                    outputs: vec!["token_out".to_string()],
+                    protocol: "uniswap_v2".to_string(),
+                    key_dependencies: ["weth_balance".to_string(), "token_out_balance".to_string()].into_iter().collect(),
+                    selector,
+                    contract: event.contract_address.into(),
+                }),
+                [0x7f, 0xf3, 0x6a, 0xb5] => Some(DeFiAction {
+                    id: "swap_exact_eth_for_tokens_supporting_fee".to_string(),
+                    action_type: "swap".to_string(),
+                    inputs: vec!["WETH".to_string()],
+                    outputs: vec!["token_out".to_string()],
+                    protocol: "uniswap_v2".to_string(),
+                    key_dependencies: ["weth_balance".to_string(), "token_out_balance".to_string()].into_iter().collect(),
+                    selector,
+                    contract: event.contract_address.into(),
+                }),
+                _ => None,
+            };
+            
+            if let Some(action) = defi_action {
+                actions.push(action);
+            }
+        }
         
         Ok(actions)
     }

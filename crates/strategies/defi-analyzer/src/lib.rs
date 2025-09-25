@@ -18,6 +18,7 @@ pub mod path_explorer;
 pub mod collectors;
 pub mod executors;
 pub mod negative_cycle_arbitrage;
+pub mod jit_strategy_discovery;
 pub mod integration_examples;
 pub mod tests;
 
@@ -36,3 +37,4 @@ pub use path_explorer::{PathExplorer, PathExplorerConfig, PathExplorerStats};
 pub use collectors::{DeFiBlockCollector, DeFiLogCollector, DeFiMempoolCollector, DeFiCollectorConfig};
 pub use executors::{DeFiMempoolExecutor, DeFiFlashbotsExecutor, DeFiExecutorConfig, DeFiExecutorFactory};
 pub use negative_cycle_arbitrage::{NegativeCycleArbitrageEngine, NegativeCycleConfig, StateSnapshot, ArbitrageCycle, ArbitragePath};
+pub use jit_strategy_discovery::{JITStrategyDiscoveryEngine, JITConfig, StrategyCandidate, StrategyType, DeFiAction};
