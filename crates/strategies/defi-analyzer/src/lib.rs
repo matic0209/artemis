@@ -30,6 +30,7 @@ pub mod mev_arbitrage_engine;
 pub mod technical_integration_demo;
 pub mod mev_defense_strategies;
 pub mod artemis_integration_bridge;
+pub mod artemis_mev_strategy;
 pub mod tests;
 
 // Re-export main components
@@ -50,3 +51,4 @@ pub use negative_cycle_arbitrage::{NegativeCycleArbitrageEngine, NegativeCycleCo
 pub use jit_strategy_discovery::{JITStrategyDiscoveryEngine, JITConfig, StrategyCandidate, StrategyType, DeFiAction};
 pub use mev_arbitrage_bot::{MEVArbitrageBot, MEVEvent, BlockEvent, TransactionEvent, PriceEvent};
 pub use mev_arbitrage_engine::{MEVArbitrageEngine, SymbolicStrategyDiscoverer, ConcreteExecutionValidator, ContractBehavior};
+pub use artemis_mev_strategy::{CompleteMEVStrategy, CompleteMEVCollector, CompleteMEVExecutor, setup_complete_artemis_mev};

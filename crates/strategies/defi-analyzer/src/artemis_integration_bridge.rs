@@ -17,6 +17,21 @@ use crate::{
     error::DeFiResult,
 };
 
+// Full Artemis integration (no more conflicts)
+use artemis_core::{
+    types::{Collector, Executor, Strategy, CollectorStream},
+    engine::Engine,
+    collectors::{
+        block_collector::{BlockCollector, NewBlock},
+        log_collector::{LogCollector, Log},
+        mempool_collector::{MempoolCollector, PendingTx},
+    },
+    executors::{
+        flashbots_alloy_executor::{FlashbotsAlloyExecutor, FlashbotsAlloyBundle},
+        mempool_alloy_executor::{MempoolAlloyExecutor, SubmitTxToMempool},
+    },
+};
+
 /// Artemis-compatible MEV Strategy
 pub struct ArtemisMEVStrategy {
     /// Core MEV arbitrage engine
