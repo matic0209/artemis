@@ -25,6 +25,7 @@ pub mod production_error_handler;
 pub mod production_monitoring;
 pub mod production_security;
 pub mod production_load_testing;
+pub mod mev_arbitrage_bot;
 pub mod tests;
 
 // Re-export main components
@@ -43,3 +44,4 @@ pub use collectors::{DeFiBlockCollector, DeFiLogCollector, DeFiMempoolCollector,
 pub use executors::{DeFiMempoolExecutor, DeFiFlashbotsExecutor, DeFiExecutorConfig, DeFiExecutorFactory};
 pub use negative_cycle_arbitrage::{NegativeCycleArbitrageEngine, NegativeCycleConfig, StateSnapshot, ArbitrageCycle, ArbitragePath};
 pub use jit_strategy_discovery::{JITStrategyDiscoveryEngine, JITConfig, StrategyCandidate, StrategyType, DeFiAction};
+pub use mev_arbitrage_bot::{MEVArbitrageBot, MEVEvent, BlockEvent, TransactionEvent, PriceEvent};
