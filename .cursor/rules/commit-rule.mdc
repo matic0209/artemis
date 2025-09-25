@@ -1,0 +1,6 @@
+## git提交的时候记得 增加上prompt的词
+---
+description: 每次提交到给他的时候都把prompt历史附上
+globs:
+alwaysApply: true
+---
