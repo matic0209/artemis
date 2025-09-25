@@ -9,6 +9,7 @@ use crate::{
     analyzer::DeFiAnalyzer,
     types::{AnalysisEvent, AnalysisAction, AnalysisResult, ArbitrageOpportunity},
     config::AnalyzerConfig,
+    negative_cycle_arbitrage::{NegativeCycleArbitrageEngine, NegativeCycleConfig, StateSnapshot},
 };
 
 // Import Artemis core types for better integration
@@ -24,6 +25,8 @@ pub struct DeFiAnalyzerStrategy {
     config: AnalyzerConfig,
     /// Analyzer instance
     analyzer: DeFiAnalyzer,
+    /// Negative cycle arbitrage engine
+    negative_cycle_engine: NegativeCycleArbitrageEngine,
     /// Statistics
     stats: StrategyStats,
     // /// Connected collectors for data sources
@@ -50,9 +53,26 @@ impl DeFiAnalyzerStrategy {
     pub fn new(config: AnalyzerConfig) -> Self {
         let analyzer = DeFiAnalyzer::new(config.clone());
         
+        // Create negative cycle arbitrage engine with default config
+        let arbitrage_config = NegativeCycleConfig {
+            target_revenue: config.min_profit_threshold,
+            max_cycles_per_iteration: 10,
+            max_path_length: 5,
+            gas_price: U256::from(20_000_000_000u64), // 20 gwei
+            base_gas_cost: 150_000,
+            supported_protocols: vec![
+                "uniswap_v2".to_string(),
+                "uniswap_v3".to_string(),
+                "sushiswap".to_string(),
+                "curve".to_string(),
+            ],
+        };
+        let negative_cycle_engine = NegativeCycleArbitrageEngine::new(arbitrage_config);
+        
         Self {
             config,
             analyzer,
+            negative_cycle_engine,
             stats: StrategyStats::default(),
             // collectors: Vec::new(),
             // executors: Vec::new(),
@@ -139,27 +159,43 @@ impl DeFiAnalyzerStrategy {
         
         info!("Processing analysis event: {:?}", event.event_type);
         
-        // Run analysis based on event type
-        let analysis_result = match event.event_type {
-            crate::types::EventType::MempoolTransaction => {
-                self.analyzer.analyze_mempool_transaction(&event).await?
-            },
-            crate::types::EventType::BlockWithDeFiActivity => {
-                self.analyzer.analyze_block_activity(&event).await?
-            },
-            crate::types::EventType::ContractDeployment => {
-                self.analyzer.analyze_contract_deployment(&event).await?
-            },
-            crate::types::EventType::MevShareEvent => {
-                self.analyzer.analyze_mev_share_event(&event).await?
-            },
-            crate::types::EventType::CustomAnalysis => {
-                self.analyzer.analyze_custom_event(&event).await?
-            },
-        };
+        // First run standard analysis
+        let analysis_result = self.analyzer.analyze_event(&event).await?;
+        
+        // Then run negative cycle arbitrage analysis
+        let state_snapshot = StateSnapshot::from_analysis_event(&event);
+        let arbitrage_revenue = self.negative_cycle_engine.execute_arbitrage_algorithm(&state_snapshot).await.unwrap_or(U256::ZERO);
+        
+        // Create additional arbitrage actions if profitable
+        let mut additional_actions = Vec::new();
+        if arbitrage_revenue > self.config.min_profit_threshold {
+            info!("Negative cycle arbitrage opportunity found: {} ETH", arbitrage_revenue);
+            
+            additional_actions.push(AnalysisAction {
+                action_id: format!("negative_cycle_arb_{}", event.block_number),
+                action_type: crate::types::ActionType::ArbitrageExecution,
+                target_address: event.contract_address,
+                calldata: vec![], // Would be populated with actual arbitrage calls
+                value: U256::ZERO,
+                gas_limit: 500_000,
+                gas_price: 20_000_000_000,
+                nonce: 0,
+                chain_id: 1,
+                expected_profit: arbitrage_revenue,
+                risk_level: crate::types::RiskLevel::Medium,
+                target_block: event.block_number + 1,
+                min_timestamp: event.timestamp,
+                max_timestamp: event.timestamp + 12, // 12 seconds
+                metadata: HashMap::new(),
+            });
+        }
+        
+        // Combine results
+        let mut combined_result = analysis_result;
+        combined_result.actions.extend(additional_actions);
 
-        // Generate actions based on analysis result
-        let actions = self.generate_actions_from_result(&analysis_result).await?;
+        // Generate actions based on combined analysis result
+        let actions = self.generate_actions_from_result(&combined_result).await?;
         
         // Execute actions through connected executors
         // for action in &actions {
@@ -176,8 +212,8 @@ impl DeFiAnalyzerStrategy {
         self.stats.total_analysis_time_ms += analysis_time;
         self.stats.actions_generated += actions.len() as u64;
         
-        if !analysis_result.results.arbitrage_opportunities.is_empty() {
-            self.stats.opportunities_found += analysis_result.results.arbitrage_opportunities.len() as u64;
+        if !combined_result.results.arbitrage_opportunities.is_empty() {
+            self.stats.opportunities_found += combined_result.results.arbitrage_opportunities.len() as u64;
         }
 
         info!("Analysis completed in {}ms, generated {} actions", analysis_time, actions.len());

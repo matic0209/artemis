@@ -5,11 +5,13 @@ A comprehensive DeFi analysis strategy for Artemis that integrates symbolic exec
 ## Features
 
 - **Symbolic Execution**: Complete EVM interpreter with Z3 integration for symbolic analysis
-- **Arbitrage Detection**: Advanced arbitrage opportunity detection with risk assessment
+- **Negative Cycle Arbitrage**: Advanced graph-based arbitrage detection using Bellman-Ford algorithm
 - **ABI Parsing**: Comprehensive ABI parsing and parameter encoding/decoding
 - **Path Exploration**: DFS-based execution path exploration with loop detection
 - **DeFi Feature Extraction**: Specialized DeFi feature detection and analysis
 - **Artemis Integration**: Seamless integration with Artemis collectors and executors
+- **Multi-Protocol Support**: Uniswap V2/V3, SushiSwap, Curve, and more
+- **Real-time Analysis**: High-performance real-time arbitrage opportunity detection
 - **Observability**: Built-in monitoring and observability capabilities
 
 ## Architecture
@@ -20,9 +22,11 @@ A comprehensive DeFi analysis strategy for Artemis that integrates symbolic exec
 - **`abi_parser`**: ABI parsing and parameter handling
 - **`defi_feature_extractor`**: DeFi-specific feature detection
 - **`path_explorer`**: Execution path exploration and analysis
-- **`arbitrage_detector`**: Arbitrage opportunity detection algorithms
+- **`arbitrage_detector`**: Basic arbitrage opportunity detection algorithms
+- **`negative_cycle_arbitrage`**: Advanced negative cycle arbitrage engine using graph theory
 - **`collectors`**: Artemis collector integration for data sources
 - **`executors`**: Artemis executor integration for action execution
+- **`integration_examples`**: Complete integration examples and use cases
 - **`observability`**: Monitoring and observability infrastructure
 
 ### Key Features
@@ -33,23 +37,30 @@ A comprehensive DeFi analysis strategy for Artemis that integrates symbolic exec
    - Cross-contract call handling
    - Memory and storage management
 
-2. **Arbitrage Detection**
+2. **Negative Cycle Arbitrage Algorithm**
+   - Graph-based arbitrage detection using Bellman-Ford algorithm
+   - Multi-protocol arbitrage path discovery
+   - Dynamic state-aware price modeling
+   - Optimal investment parameter search
+   - Cross-protocol cycle detection
+
+3. **Traditional Arbitrage Detection**
    - Price arbitrage detection
    - Liquidity arbitrage detection
    - Cross-protocol arbitrage
    - Risk assessment and profit calculation
 
-3. **ABI Integration**
+4. **ABI Integration**
    - Multi-source ABI fetching (Etherscan, Sourcify, 4byte, OpenChain)
    - Parameter encoding/decoding
    - Function signature analysis
 
-4. **Path Exploration**
+5. **Path Exploration**
    - DFS-based execution path exploration
    - Loop detection and path pruning
    - Path deduplication and optimization
 
-5. **Artemis Integration**
+6. **Artemis Integration**
    - Seamless collector integration (blocks, logs, mempool)
    - Executor integration (mempool, Flashbots)
    - Event stream processing
@@ -83,19 +94,65 @@ let event = AnalysisEvent {
 let result = analyzer.analyze_event(&event).await?;
 ```
 
+### Negative Cycle Arbitrage Integration
+
+```rust
+use defi_analyzer::{
+    DeFiAnalyzerStrategy, 
+    NegativeCycleArbitrageEngine,
+    NegativeCycleConfig,
+    StateSnapshot,
+    integration_examples::run_all_examples,
+};
+
+// Create strategy with negative cycle arbitrage
+let mut strategy = DeFiAnalyzerStrategy::new(config);
+strategy.initialize().await?;
+
+// The strategy automatically integrates negative cycle arbitrage
+// and will detect arbitrage opportunities using graph algorithms
+let actions = strategy.process_event(analysis_event).await;
+```
+
+### Advanced Integration Examples
+
+```rust
+// Run comprehensive integration examples
+run_all_examples().await?;
+
+// Create custom arbitrage configuration
+let arbitrage_config = NegativeCycleConfig {
+    target_revenue: U256::from(5_000_000_000_000_000u64), // 0.005 ETH
+    max_cycles_per_iteration: 10,
+    max_path_length: 6,
+    supported_protocols: vec![
+        "uniswap_v2".to_string(),
+        "uniswap_v3".to_string(),
+        "sushiswap".to_string(),
+        "curve".to_string(),
+    ],
+    ..Default::default()
+};
+
+// Manual arbitrage engine usage
+let mut arbitrage_engine = NegativeCycleArbitrageEngine::new(arbitrage_config);
+let state_snapshot = StateSnapshot::from_analysis_event(&event);
+let total_revenue = arbitrage_engine.execute_arbitrage_algorithm(&state_snapshot).await?;
+```
+
 ### Artemis Integration
 
 ```rust
 use defi_analyzer::{
-    DeFiAnalyzerStrategy,
+    DeFiAnalyzerStrategy, 
     DeFiCollectorConfig, 
     DeFiExecutorConfig,
     DeFiExecutorFactory
 };
 
 // Create strategy with Artemis integration
-    let mut strategy = DeFiAnalyzerStrategy::new(config);
-    strategy.initialize().await?;
+let mut strategy = DeFiAnalyzerStrategy::new(config);
+strategy.initialize().await?;
     
 // Configure collectors
 let collector_config = DeFiCollectorConfig {
