@@ -174,7 +174,7 @@ impl ABIParser {
     }
 
     /// Generate symbolic input based on ABI
-    pub fn generate_symbolic_input<'a>(&self, abi_element: &ABIElement, 
+    pub fn generate_symbolic_input<'a>(&'a self, abi_element: &ABIElement, 
                                   specified_values: Option<HashMap<String, z3::ast::BV<'a>>>) -> DeFiResult<(z3::ast::BV<'a>, HashMap<String, z3::ast::BV<'a>>)> {
         let function_hash_str = self.generate_ethereum_function_hash(abi_element)?;
         let function_hash_decimal = i64::from_str_radix(&function_hash_str[2..], 16)
@@ -400,25 +400,110 @@ impl ABIUtils {
 
     /// Encode ABI parameters
     pub fn encode_parameters(parameters: &[ABIParameter], values: &[String]) -> DeFiResult<String> {
-        // This is a simplified implementation
-        // In a real implementation, you would use a proper ABI encoder
-        let mut encoded = String::new();
-        for (param, value) in parameters.iter().zip(values.iter()) {
-            encoded.push_str(&format!("{}:{}", param.name, value));
-            if param != parameters.last().unwrap() {
-                encoded.push(',');
-            }
+        if parameters.len() != values.len() {
+            return Err(DeFiAnalyzerError::InvalidInput("Parameter count mismatch".to_string()));
         }
-        Ok(encoded)
+        
+        let mut encoded_parts = Vec::new();
+        
+        for (param, value) in parameters.iter().zip(values.iter()) {
+            let encoded_value = match param.param_type.as_str() {
+                "uint256" | "uint128" | "uint64" | "uint32" | "uint8" => {
+                    // Encode as 32-byte hex string
+                    if let Ok(num) = value.parse::<u64>() {
+                        format!("{:064x}", num)
+                    } else {
+                        return Err(DeFiAnalyzerError::InvalidInput("Invalid uint value".to_string()));
+                    }
+                },
+                "address" => {
+                    // Encode as 32-byte hex string (left-padded)
+                    if value.starts_with("0x") && value.len() == 42 {
+                        format!("{:0>64}", &value[2..])
+                    } else {
+                        return Err(DeFiAnalyzerError::InvalidInput("Invalid address format".to_string()));
+                    }
+                },
+                "bool" => {
+                    // Encode as 32-byte hex string
+                    if value == "true" {
+                        format!("{:064x}", 1u64)
+                    } else if value == "false" {
+                        format!("{:064x}", 0u64)
+                    } else {
+                        return Err(DeFiAnalyzerError::InvalidInput("Invalid bool value".to_string()));
+                    }
+                },
+                "bytes32" => {
+                    // Encode as 32-byte hex string
+                    if value.starts_with("0x") && value.len() == 66 {
+                        value[2..].to_string()
+                    } else {
+                        return Err(DeFiAnalyzerError::InvalidInput("Invalid bytes32 format".to_string()));
+                    }
+                },
+                _ => {
+                    // For other types, use simplified encoding
+                    format!("{:064x}", value.len())
+                }
+            };
+            encoded_parts.push(encoded_value);
+        }
+        
+        Ok(encoded_parts.join(""))
     }
 
     /// Decode ABI parameters
     pub fn decode_parameters(parameters: &[ABIParameter], encoded: &str) -> DeFiResult<Vec<String>> {
-        // This is a simplified implementation
-        // In a real implementation, you would use a proper ABI decoder
-        let values: Vec<String> = encoded.split(',')
-            .map(|s| s.split(':').nth(1).unwrap_or("").to_string())
-            .collect();
-        Ok(values)
+        if encoded.len() % 64 != 0 {
+            return Err(DeFiAnalyzerError::InvalidInput("Invalid encoded length".to_string()));
+        }
+        
+        let mut decoded_values = Vec::new();
+        let mut offset = 0;
+        
+        for param in parameters {
+            if offset + 64 > encoded.len() {
+                return Err(DeFiAnalyzerError::InvalidInput("Insufficient encoded data".to_string()));
+            }
+            
+            let chunk = &encoded[offset..offset + 64];
+            let decoded_value = match param.param_type.as_str() {
+                "uint256" | "uint128" | "uint64" | "uint32" | "uint8" => {
+                    if let Ok(num) = u64::from_str_radix(chunk, 16) {
+                        num.to_string()
+                    } else {
+                        return Err(DeFiAnalyzerError::InvalidInput("Invalid uint decoding".to_string()));
+                    }
+                },
+                "address" => {
+                    // Remove leading zeros and add 0x prefix
+                    let trimmed = chunk.trim_start_matches('0');
+                    if trimmed.is_empty() {
+                        "0x0000000000000000000000000000000000000000".to_string()
+                    } else {
+                        format!("0x{:0>40}", trimmed)
+                    }
+                },
+                "bool" => {
+                    if let Ok(num) = u64::from_str_radix(chunk, 16) {
+                        if num == 0 { "false".to_string() } else { "true".to_string() }
+                    } else {
+                        return Err(DeFiAnalyzerError::InvalidInput("Invalid bool decoding".to_string()));
+                    }
+                },
+                "bytes32" => {
+                    format!("0x{}", chunk)
+                },
+                _ => {
+                    // For other types, return the hex string
+                    format!("0x{}", chunk)
+                }
+            };
+            decoded_values.push(decoded_value);
+            offset += 64;
+        }
+        
+        Ok(decoded_values)
     }
 }

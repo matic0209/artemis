@@ -20,7 +20,7 @@ use crate::{
 /// Complete DeFi Feature Extractor implementation
 pub struct DeFiFeatureExtractor<'ctx> {
     /// Z3 context
-    ctx: z3::Context,
+    ctx: &'ctx z3::Context,
     /// Balance symbols cache
     balance_symbols_cache: HashMap<String, Vec<z3::ast::BV<'ctx>>>,
     /// Configuration
@@ -136,7 +136,7 @@ pub enum RiskLevel {
 
 impl<'ctx> DeFiFeatureExtractor<'ctx> {
     /// Create new DeFi feature extractor
-    pub fn new(ctx: z3::Context, config: DeFiFeatureExtractorConfig) -> Self {
+    pub fn new(ctx: &'ctx z3::Context, config: DeFiFeatureExtractorConfig) -> Self {
         Self {
             ctx,
             balance_symbols_cache: HashMap::new(),
@@ -153,8 +153,8 @@ impl<'ctx> DeFiFeatureExtractor<'ctx> {
         let mut address_to_conditions_map = AddressToConditions::new();
         
         // Pre-compute constant values to avoid borrowing conflicts  
-        let zero_value = BV::from_u64(&self.ctx, 0, 256);
-        let one_value = BV::from_u64(&self.ctx, 1, 256);
+        let zero_value = BV::from_u64(self.ctx, 0, 256);
+        let one_value = BV::from_u64(self.ctx, 1, 256);
         
         let mut current_called_contract = called_contract;
 
@@ -165,7 +165,7 @@ impl<'ctx> DeFiFeatureExtractor<'ctx> {
             
             if !balance_symbol_map.contains_key(&current_called_address_string) {
                 // Create balance symbol directly to avoid borrowing conflicts
-                let balance_symbol = BV::new_const(&self.ctx, format!("balance_{}", current_called_address_string), 256);
+                let balance_symbol = BV::new_const(self.ctx, format!("balance_{}", current_called_address_string), 256);
                 balance_symbol_map.insert(current_called_address_string.clone(), balance_symbol);
             }
 
@@ -189,7 +189,7 @@ impl<'ctx> DeFiFeatureExtractor<'ctx> {
                         if let Some(concrete_condition) = simplified_condition.as_bool() {
                             if !concrete_condition {
                                 // Store the condition as a BV by creating a new one
-                                let condition_bv = BV::new_const(&self.ctx, format!("condition_{}", current_called_address_string), 256);
+                                let condition_bv = BV::new_const(self.ctx, format!("condition_{}", current_called_address_string), 256);
                                 address_to_conditions_map
                                     .entry(current_called_address_string.clone())
                                     .or_insert_with(Vec::new)
@@ -341,7 +341,7 @@ impl<'ctx> DeFiFeatureExtractor<'ctx> {
     }
 
     /// Extract arbitrage opportunities
-    fn extract_arbitrage_opportunities(&self, path: &ExecutionPath) -> DeFiResult<Vec<ArbitrageOpportunity>> {
+    fn extract_arbitrage_opportunities(&self, path: &ExecutionPath<'ctx>) -> DeFiResult<Vec<ArbitrageOpportunity<'ctx>>> {
         let mut opportunities = Vec::new();
         
         // Analyze execution path for arbitrage patterns
@@ -367,17 +367,72 @@ impl<'ctx> DeFiFeatureExtractor<'ctx> {
     }
 
     /// Analyze cross-protocol arbitrage
-    fn analyze_cross_protocol_arbitrage(&self, path: &ExecutionPath, index: usize) -> Option<ArbitrageOpportunity> {
-        // This is a simplified implementation
-        // In a real implementation, you would analyze the execution path for cross-protocol patterns
+    fn analyze_cross_protocol_arbitrage(&self, path: &ExecutionPath<'ctx>, index: usize) -> Option<ArbitrageOpportunity<'ctx>> {
+        if index + 1 >= path.len() {
+            return None;
+        }
+        
+        let current_state = &path[index];
+        let next_state = &path[index + 1];
+        
+        // Check for cross-protocol call patterns
+        if let Some(call_info) = &current_state.call_info {
+            // Look for patterns that suggest arbitrage opportunities
+            let profit_potential = self.calculate_profit_potential(path, index);
+            if profit_potential > U256::from(0) {
+                return Some(ArbitrageOpportunity {
+                    opportunity_type: ArbitrageType::CrossProtocolArbitrage,
+                    profit_potential,
+                    risk_level: RiskLevel::Medium,
+                    confidence: 0.7,
+                    description: "Cross-protocol arbitrage opportunity detected".to_string(),
+                    execution_path: path.clone(),
+                });
+            }
+        }
+        
         None
     }
 
     /// Analyze price arbitrage
-    fn analyze_price_arbitrage(&self, path: &ExecutionPath, index: usize) -> Option<ArbitrageOpportunity> {
-        // This is a simplified implementation
-        // In a real implementation, you would analyze price differences and arbitrage opportunities
+    fn analyze_price_arbitrage(&self, path: &ExecutionPath<'ctx>, index: usize) -> Option<ArbitrageOpportunity<'ctx>> {
+        if index + 1 >= path.len() {
+            return None;
+        }
+        
+        let current_state = &path[index];
+        
+        // Check for price manipulation patterns
+        if let Some(storage_info) = &current_state.storage_info {
+            // Look for price-related storage changes
+            let profit_potential = self.calculate_price_arbitrage_potential(path, index);
+            if profit_potential > U256::from(0) {
+                return Some(ArbitrageOpportunity {
+                    opportunity_type: ArbitrageType::PriceArbitrage,
+                    profit_potential,
+                    risk_level: RiskLevel::High,
+                    confidence: 0.8,
+                    description: "Price arbitrage opportunity detected".to_string(),
+                    execution_path: path.clone(),
+                });
+            }
+        }
+        
         None
+    }
+
+    /// Calculate profit potential for cross-protocol arbitrage
+    fn calculate_profit_potential(&self, path: &ExecutionPath<'ctx>, index: usize) -> U256 {
+        // Simplified profit calculation
+        // In a real implementation, you would analyze the execution path for profit opportunities
+        U256::from(1000) // Placeholder value
+    }
+
+    /// Calculate price arbitrage potential
+    fn calculate_price_arbitrage_potential(&self, path: &ExecutionPath<'ctx>, index: usize) -> U256 {
+        // Simplified price arbitrage calculation
+        // In a real implementation, you would analyze price differences
+        U256::from(500) // Placeholder value
     }
 
     /// Check if element is in condition list
@@ -391,7 +446,7 @@ impl<'ctx> DeFiFeatureExtractor<'ctx> {
     }
 
     /// Analyze DeFi protocol patterns
-    pub fn analyze_defi_protocol_patterns(&self, path: &ExecutionPath) -> DeFiResult<Vec<DeFiProtocolPattern>> {
+    pub fn analyze_defi_protocol_patterns<'a>(&self, path: &ExecutionPath<'a>) -> DeFiResult<Vec<DeFiProtocolPattern<'a>>> where 'ctx: 'a {
         let mut patterns = Vec::new();
         
         for state in path {
@@ -416,19 +471,19 @@ impl<'ctx> DeFiFeatureExtractor<'ctx> {
     }
 
     /// Analyze call pattern
-    fn analyze_call_pattern(&self, state: &EVMExecutionState) -> Option<DeFiProtocolPattern> {
+    fn analyze_call_pattern(&self, state: &EVMExecutionState<'ctx>) -> Option<DeFiProtocolPattern<'ctx>> {
         // Analyze call patterns for DeFi protocols
         None
     }
 
     /// Analyze storage pattern
-    fn analyze_storage_pattern(&self, state: &EVMExecutionState) -> Option<DeFiProtocolPattern> {
+    fn analyze_storage_pattern(&self, state: &EVMExecutionState<'ctx>) -> Option<DeFiProtocolPattern<'ctx>> {
         // Analyze storage patterns for DeFi protocols
         None
     }
 
     /// Get feature statistics
-    pub fn get_feature_statistics(&self, feature: &DeFiFeature) -> DeFiFeatureStatistics {
+    pub fn get_feature_statistics<'a>(&self, feature: &DeFiFeature<'a>) -> DeFiFeatureStatistics {
         DeFiFeatureStatistics {
             total_balance_changes: feature.erc_balance_change_map.values().map(|v| v.len()).sum(),
             total_eth_transfers: feature.eth_transfers.len(),

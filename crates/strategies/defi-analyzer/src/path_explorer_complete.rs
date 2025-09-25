@@ -19,7 +19,7 @@ use crate::{
 /// Complete Path Explorer for DFS symbolic execution
 pub struct PathExplorer<'ctx> {
     /// Z3 context
-    ctx: z3::Context,
+    ctx: &'ctx z3::Context,
     /// SEVM instance
     sevm: SEVM<'ctx>,
     /// Execution paths
@@ -32,6 +32,8 @@ pub struct PathExplorer<'ctx> {
     stats: PathExplorerStats,
     /// Start time
     start_time: Instant,
+    /// Optional code fetcher closure
+    code_fetcher: Option<std::sync::Arc<dyn Fn(&str) -> Vec<u8> + Send + Sync>>,
 }
 
 /// Path explorer configuration
@@ -88,9 +90,8 @@ pub struct PathExplorerStats {
 
 impl<'ctx> PathExplorer<'ctx> {
     /// Create new path explorer
-    pub fn new(_ctx: z3::Context, config: PathExplorerConfig) -> Self {
-        let ctx = z3::Context::new(&z3::Config::new());
-        let sevm = SEVM::new(&ctx);
+    pub fn new(ctx: &'ctx z3::Context, config: PathExplorerConfig) -> Self {
+        let sevm = SEVM::new(ctx);
         Self {
             sevm,
             ctx,
@@ -99,11 +100,22 @@ impl<'ctx> PathExplorer<'ctx> {
             config,
             stats: PathExplorerStats::default(),
             start_time: Instant::now(),
+            code_fetcher: None,
         }
     }
 
+    /// Attach code fetcher and propagate into SEVM
+    pub fn set_code_fetcher<F>(&mut self, fetcher: F)
+    where
+        F: Fn(&str) -> Vec<u8> + Send + Sync + 'static,
+    {
+        let arc = std::sync::Arc::new(fetcher);
+        self.code_fetcher = Some(arc.clone());
+        self.sevm.set_code_fetcher(move |addr: &str| (arc)(addr));
+    }
+
     /// Explore paths using DFS
-    pub fn explore_paths(&mut self, interpreter: &mut SymbolicEVMInterpreter, event: &AnalysisEvent) -> DeFiResult<Vec<ExecutionPath>> {
+    pub fn explore_paths(&mut self, interpreter: &mut SymbolicEVMInterpreter<'ctx>, event: &AnalysisEvent) -> DeFiResult<Vec<ExecutionPath<'ctx>>> {
         info!("Starting path exploration for contract: {:?}", event.contract_address);
         
         let start_time = Instant::now();
@@ -111,13 +123,15 @@ impl<'ctx> PathExplorer<'ctx> {
         self.stats = PathExplorerStats::default();
         
         // Initialize execution state
-        let initial_state = self.initialize_execution_state(interpreter, event)?;
+        let initial_state = PathExplorer::initialize_execution_state_with_ctx(self.ctx, interpreter, event)?;
         
         // Start DFS exploration
         let mut current_path = ExecutionPath::new();
         let mut execution_path_list = ExecutionPathList::new();
-        
-        self.dfs_explore(interpreter, &initial_state, &mut current_path, 0, &mut execution_path_list)?;
+        {
+            // limit scope of any borrows from initial_state before stats assignment
+            self.dfs_explore(interpreter, &initial_state, &mut current_path, 0, &mut execution_path_list)?;
+        }
         
         // Update stats after all borrowing is done
         let execution_time = start_time.elapsed();
@@ -129,24 +143,24 @@ impl<'ctx> PathExplorer<'ctx> {
     }
 
     /// Initialize execution state
-    fn initialize_execution_state(&self, _interpreter: &mut SymbolicEVMInterpreter, event: &AnalysisEvent) -> DeFiResult<EVMExecutionState> {
+    fn initialize_execution_state_with_ctx(ctx: &'ctx z3::Context, _interpreter: &mut SymbolicEVMInterpreter, event: &AnalysisEvent) -> DeFiResult<EVMExecutionState<'ctx>> {
         let state = EVMExecutionState {
             current_opcode: OpCode::STOP,
             current_pc: 0,
-            current_memory: SymbolicMemory::new(&self.ctx),
+            current_memory: SymbolicMemory::new(ctx),
             current_stack: SymbolicStack::new(1024),
             current_return_value: None,
             current_return_error: None,
             current_evm_depth: 0,
-            current_called_contract: BV::new_const(&self.ctx, "Contract", 256),
+            current_called_contract: BV::new_const(ctx, "Contract", 256),
         };
         
         Ok(state)
     }
 
     /// DFS exploration
-    fn dfs_explore(&mut self, interpreter: &mut SymbolicEVMInterpreter, state: &EVMExecutionState, 
-                  current_path: &mut ExecutionPath, depth: u32, execution_path_list: &mut ExecutionPathList) -> DeFiResult<()> {
+    fn dfs_explore<'a>(&mut self, interpreter: &mut SymbolicEVMInterpreter<'a>, state: &EVMExecutionState<'a>, 
+                  current_path: &mut ExecutionPath<'a>, depth: u32, execution_path_list: &mut ExecutionPathList<'a>) -> DeFiResult<()> where 'ctx: 'a {
         // Check timeout
         if self.start_time.elapsed() > self.config.timeout {
             warn!("Path exploration timeout reached");
@@ -216,27 +230,27 @@ impl<'ctx> PathExplorer<'ctx> {
     }
 
     /// Symbolic execution exploration
-    fn symbolic_execution_explore(&mut self, interpreter: &mut SymbolicEVMInterpreter, 
-                                 state: &EVMExecutionState, current_path: &mut ExecutionPath, 
-                                 depth: u32, execution_path_list: &mut ExecutionPathList) -> DeFiResult<()> {
+    fn symbolic_execution_explore<'a>(&mut self, interpreter: &mut SymbolicEVMInterpreter<'a>, 
+                                 state: &EVMExecutionState<'a>, current_path: &mut ExecutionPath<'a>, 
+                                 depth: u32, execution_path_list: &mut ExecutionPathList<'a>) -> DeFiResult<()> where 'ctx: 'a {
         let symbolic_start = Instant::now();
         
         // Create contract for symbolic execution
         let mut contract = Contract::new(
-            BV::new_const(&self.ctx, "caller", 256),
+            BV::new_const(self.ctx, "caller", 256),
             state.current_called_contract.clone(),
-            BV::new_const(&self.ctx, "value", 256),
+            BV::new_const(self.ctx, "value", 256),
             100_000_000
         );
         
         // Set contract code (this should be loaded from the actual contract)
         let contract_code = self.get_contract_code(&state.current_called_contract);
         contract.set_call_code(state.current_called_contract.clone(), &contract_code);
-        contract.set_input(BV::new_const(&self.ctx, "input", 256));
+        contract.set_input(BV::new_const(self.ctx, "input", 256));
         
         // Perform symbolic execution
         let mut path_copy = current_path.clone();
-        interpreter.symbolic_run_dfs(&contract, &self.ctx, &mut path_copy, execution_path_list)?;
+        interpreter.symbolic_run_dfs(&contract, self.ctx, &mut path_copy, execution_path_list)?;
         
         self.stats.symbolic_execution_time += symbolic_start.elapsed();
         Ok(())
@@ -310,8 +324,10 @@ impl<'ctx> PathExplorer<'ctx> {
 
     /// Get contract code
     fn get_contract_code(&self, _contract_address: &z3::ast::BV) -> Vec<u8> {
-        // This should be implemented to fetch actual contract code
-        // For now, return empty vector
+        if let Some(fetcher) = &self.code_fetcher {
+            let addr_str = _contract_address.to_string();
+            return (fetcher)(&addr_str);
+        }
         Vec::new()
     }
 
@@ -354,6 +370,22 @@ impl<'ctx> PathExplorer<'ctx> {
     fn hash_path(&self, path: &ExecutionPath) -> String {
         let opcodes: Vec<String> = path.iter().map(|step| step.current_opcode.to_string()).collect();
         opcodes.join(":")
+    }
+
+    /// Calculate unique paths count
+    fn calculate_unique_paths(&self, paths: &[ExecutionPath]) -> u32 {
+        let mut seen_hashes = HashSet::new();
+        let mut unique_count = 0;
+        
+        for path in paths.iter() {
+            let path_hash = self.hash_path(path);
+            if !seen_hashes.contains(&path_hash) {
+                seen_hashes.insert(path_hash);
+                unique_count += 1;
+            }
+        }
+        
+        unique_count
     }
 
     /// Calculate path priority
@@ -524,7 +556,7 @@ impl<'ctx> PathAnalyzer<'ctx> {
             analysis_id,
             contract_address,
             total_paths: paths.len() as u32,
-            unique_paths: paths.len() as u32, // This should be calculated properly
+            unique_paths: self.calculate_unique_paths(&paths),
             execution_time: self.explorer.get_stats().execution_time,
             path_statistics,
             risk_assessment,

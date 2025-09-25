@@ -196,14 +196,14 @@ impl MonitoringManager {
         self.strategy_metrics.insert(name.clone(), metrics.clone());
         
         // 注册 Prometheus 指标
-        // 注册指标（使用 metrics 宏）
-        counter!("strategy_events_processed", 0, "strategy" => name.clone());
-        counter!("strategy_actions_generated", 0, "strategy" => name.clone());
-        counter!("strategy_actions_executed", 0, "strategy" => name.clone());
-        counter!("strategy_failures", 0, "strategy" => name.clone());
-        histogram!("strategy_processing_time_ms", 0.0, "strategy" => name.clone());
-        gauge!("strategy_success_rate", 0.0, "strategy" => name.clone());
-        gauge!("strategy_total_profit_eth", 0.0, "strategy" => name.clone());
+        // TODO: 修复 metrics 宏语法问题
+        // counter!("strategy_events_processed", 0, "strategy" => name.as_str());
+        // counter!("strategy_actions_generated", 0, "strategy" => name.as_str());
+        // counter!("strategy_actions_executed", 0, "strategy" => name.as_str());
+        // counter!("strategy_failures", 0, "strategy" => name.as_str());
+        // histogram!("strategy_processing_time_ms", 0.0, "strategy" => name.as_str());
+        // gauge!("strategy_success_rate", 0.0, "strategy" => name.as_str());
+        // gauge!("strategy_total_profit_eth", 0.0, "strategy" => name.as_str());
     }
 
     /// 更新策略指标

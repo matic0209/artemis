@@ -10,6 +10,8 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use std::fmt;
 use z3::{Context, Config, Solver, ast::{BV, Bool, Ast}};
+use std::sync::Arc;
+use core::str::FromStr;
 
 use crate::{
     types::AnalysisEvent,
@@ -19,13 +21,15 @@ use crate::{
 /// Complete SEVM (Symbolic EVM) implementation
 pub struct SEVM<'ctx> {
     /// Z3 context
-    pub ctx: Context,
+    pub ctx: &'ctx Context,
     /// Symbolic EVM interpreter
     pub interpreter: Box<SymbolicEVMInterpreter<'ctx>>,
     /// Origin address
     pub origin: BV<'ctx>,
     /// Depth counter
     pub depth: i32,
+    /// Optional code fetcher: given hex address string -> bytecode bytes
+    pub code_fetcher: Option<Arc<dyn Fn(&str) -> Vec<u8> + Send + Sync>>,
 }
 
 impl<'ctx> SEVM<'ctx> {
@@ -33,11 +37,20 @@ impl<'ctx> SEVM<'ctx> {
     pub fn new(ctx: &'ctx Context) -> Self {
         let interpreter = Box::new(SymbolicEVMInterpreter::new(ctx));
         Self {
-            ctx: Context::new(&Config::new()),
+            ctx,
             interpreter,
             origin: BV::new_const(ctx, "origin", 256),
             depth: 0,
+            code_fetcher: None,
         }
+    }
+
+    /// Attach a code fetcher closure
+    pub fn set_code_fetcher<F>(&mut self, fetcher: F)
+    where
+        F: Fn(&str) -> Vec<u8> + Send + Sync + 'static,
+    {
+        self.code_fetcher = Some(Arc::new(fetcher));
     }
 
     /// Handle CALL operation
@@ -58,7 +71,7 @@ impl<'ctx> SEVM<'ctx> {
         contract.set_input(input);
         
         self.depth += 1;
-        self.interpreter.symbolic_run_dfs(&contract, &self.ctx, current_path, execution_path_list)?;
+        self.interpreter.symbolic_run_dfs(&contract, self.ctx, current_path, execution_path_list)?;
         self.depth -= 1;
         
         Ok(())
@@ -83,7 +96,7 @@ impl<'ctx> SEVM<'ctx> {
         contract.set_call_code(addr, &code);
         
         self.depth += 1;
-        self.interpreter.symbolic_run_dfs(&contract, &self.ctx, current_path, execution_path_list)?;
+        self.interpreter.symbolic_run_dfs(&contract, self.ctx, current_path, execution_path_list)?;
         self.depth -= 1;
         
         Ok(())
@@ -108,16 +121,18 @@ impl<'ctx> SEVM<'ctx> {
         contract.set_call_code(delegate_call_addr, &code);
         
         self.depth += 1;
-        self.interpreter.symbolic_run_dfs(&contract, &self.ctx, current_path, execution_path_list)?;
+        self.interpreter.symbolic_run_dfs(&contract, self.ctx, current_path, execution_path_list)?;
         self.depth -= 1;
         
         Ok(())
     }
 
-    /// Get contract code by address (placeholder implementation)
-    fn get_contract_code_by_address(&self, _address: &str) -> Vec<u8> {
-        // This should be implemented to fetch actual contract code
-        // For now, return empty vector
+    /// Get contract code by address
+    fn get_contract_code_by_address(&self, address: &str) -> Vec<u8> {
+        if let Some(fetcher) = &self.code_fetcher {
+            return (fetcher)(address);
+        }
+        // Fallback to empty if no fetcher registered
         Vec::new()
     }
 }
@@ -137,10 +152,94 @@ pub struct SymbolicEVMInterpreter<'ctx> {
 impl<'ctx> SymbolicEVMInterpreter<'ctx> {
     /// Create new interpreter
     pub fn new(ctx: &'ctx Context) -> Self {
+        let mut table = JumpTable::new();
+        // Register minimal operations
+        table.operations.insert(OpCode::POP, Box::new(OpPop));
+        table.operations.insert(OpCode::ADD, Box::new(OpAdd));
+        table.operations.insert(OpCode::SUB, Box::new(OpSub));
+        table.operations.insert(OpCode::MUL, Box::new(OpMul));
+        table.operations.insert(OpCode::DIV, Box::new(OpDiv));
+        table.operations.insert(OpCode::AND, Box::new(OpAnd));
+        table.operations.insert(OpCode::OR, Box::new(OpOr));
+        table.operations.insert(OpCode::XOR, Box::new(OpXor));
+        table.operations.insert(OpCode::NOT, Box::new(OpNot));
+        table.operations.insert(OpCode::MLOAD, Box::new(OpMload));
+        table.operations.insert(OpCode::MSTORE, Box::new(OpMstore));
+        table.operations.insert(OpCode::SLOAD, Box::new(OpSload));
+        table.operations.insert(OpCode::SSTORE, Box::new(OpSstore));
+        table.operations.insert(OpCode::SHA3, Box::new(OpSha3));
+        table.operations.insert(OpCode::RETURN, Box::new(OpReturn));
+        table.operations.insert(OpCode::REVERT, Box::new(OpRevert));
+        table.operations.insert(OpCode::STOP, Box::new(OpStop));
+        table.operations.insert(OpCode::RETURNDATASIZE, Box::new(OpReturnDataSize));
+        table.operations.insert(OpCode::RETURNDATACOPY, Box::new(OpReturnDataCopy));
+        table.operations.insert(OpCode::EQ, Box::new(OpEq));
+        table.operations.insert(OpCode::ISZERO, Box::new(OpIsZero));
+        table.operations.insert(OpCode::LT, Box::new(OpLt));
+        table.operations.insert(OpCode::GT, Box::new(OpGt));
+        table.operations.insert(OpCode::SLT, Box::new(OpSlt));
+        table.operations.insert(OpCode::SGT, Box::new(OpSgt));
+        table.operations.insert(OpCode::JUMPDEST, Box::new(OpJumpdest));
+        table.operations.insert(OpCode::ADDRESS, Box::new(OpAddress));
+        table.operations.insert(OpCode::CALLER, Box::new(OpCaller));
+        table.operations.insert(OpCode::CALLVALUE, Box::new(OpCallValue));
+        table.operations.insert(OpCode::ORIGIN, Box::new(OpOrigin));
+        table.operations.insert(OpCode::PC, Box::new(OpPc));
+        table.operations.insert(OpCode::MSIZE, Box::new(OpMsize));
+        table.operations.insert(OpCode::GAS, Box::new(OpGas));
+        table.operations.insert(OpCode::CALLDATALOAD, Box::new(OpCalldataLoad));
+        table.operations.insert(OpCode::CALLDATASIZE, Box::new(OpCalldataSize));
+        table.operations.insert(OpCode::CALLDATACOPY, Box::new(OpCalldataCopy));
+        table.operations.insert(OpCode::CODESIZE, Box::new(OpCodeSize));
+        table.operations.insert(OpCode::CODECOPY, Box::new(OpCodeCopy));
+        table.operations.insert(OpCode::EXTCODESIZE, Box::new(OpExtCodeSize));
+        table.operations.insert(OpCode::EXTCODECOPY, Box::new(OpExtCodeCopy));
+        table.operations.insert(OpCode::EXTCODEHASH, Box::new(OpExtCodeHash));
+        table.operations.insert(OpCode::BALANCE, Box::new(OpBalance));
+        table.operations.insert(OpCode::SHL, Box::new(OpShl));
+        table.operations.insert(OpCode::SHR, Box::new(OpShr));
+        table.operations.insert(OpCode::SAR, Box::new(OpSar));
+        table.operations.insert(OpCode::BYTE, Box::new(OpByte));
+        table.operations.insert(OpCode::GASPRICE, Box::new(OpGasPrice));
+        table.operations.insert(OpCode::BASEFEE, Box::new(OpBaseFee));
+        table.operations.insert(OpCode::CHAINID, Box::new(OpChainId));
+        table.operations.insert(OpCode::TIMESTAMP, Box::new(OpTimestamp));
+        table.operations.insert(OpCode::NUMBER, Box::new(OpNumber));
+        table.operations.insert(OpCode::SELFBALANCE, Box::new(OpSelfBalance));
+        table.operations.insert(OpCode::SELFDESTRUCT, Box::new(OpSelfDestruct));
+        table.operations.insert(OpCode::MSTORE8, Box::new(OpMstore8));
+        table.operations.insert(OpCode::BLOCKHASH, Box::new(OpBlockHash));
+        table.operations.insert(OpCode::COINBASE, Box::new(OpCoinbase));
+        table.operations.insert(OpCode::GASLIMIT, Box::new(OpGasLimit));
+        table.operations.insert(OpCode::DIFFICULTY, Box::new(OpDifficulty));
+        
+        // Arithmetic operations
+        table.operations.insert(OpCode::SDIV, Box::new(OpSdiv));
+        table.operations.insert(OpCode::SMOD, Box::new(OpSmod));
+        table.operations.insert(OpCode::ADDMOD, Box::new(OpAddmod));
+        table.operations.insert(OpCode::MULMOD, Box::new(OpMulmod));
+        table.operations.insert(OpCode::EXP, Box::new(OpExp));
+        table.operations.insert(OpCode::SIGNEXTEND, Box::new(OpSignextend));
+        
+        // Logging operations
+        table.operations.insert(OpCode::LOG0, Box::new(OpLog0));
+        table.operations.insert(OpCode::LOG1, Box::new(OpLog1));
+        table.operations.insert(OpCode::LOG2, Box::new(OpLog2));
+        table.operations.insert(OpCode::LOG3, Box::new(OpLog3));
+        table.operations.insert(OpCode::LOG4, Box::new(OpLog4));
+        
+        // Contract creation
+        table.operations.insert(OpCode::CREATE, Box::new(OpCreate));
+        table.operations.insert(OpCode::CREATE2, Box::new(OpCreate2));
+        table.operations.insert(OpCode::CALLCODE, Box::new(OpCallcode));
+        
+        // Invalid operation
+        table.operations.insert(OpCode::INVALID, Box::new(OpInvalid));
+        
         Self {
             evm: None,
             return_data: None,
-            table: JumpTable::new(),
+            table,
             z3_variables: HashMap::new(),
         }
     }
@@ -186,6 +285,9 @@ impl<'ctx> SymbolicEVMInterpreter<'ctx> {
         match op {
             OpCode::JUMPI => {
                 self.handle_jumpi(contract, pc, call_context, visited_nodes, current_path, execution_path_list)?;
+            },
+            OpCode::JUMP => {
+                self.handle_jump(contract, pc, call_context, visited_nodes, current_path, execution_path_list)?;
             },
             OpCode::CALL | OpCode::STATICCALL | OpCode::DELEGATECALL => {
                 self.handle_call_operations(contract, pc, call_context, current_path, execution_path_list, op)?;
@@ -246,7 +348,10 @@ impl<'ctx> SymbolicEVMInterpreter<'ctx> {
         // Update execution path - use cloned call_context to avoid borrowing conflicts
         {
             let mut call_context_clone = call_context.deep_copy();
-            self.update_execution_path(current_path, &mut call_context_clone, current_pc, OpCode::JUMPI, None, None);
+            let memory = call_context_clone.memory().clone();
+            let stack = call_context_clone.stack().clone();
+            let address = call_context_clone.contract().address();
+            self.update_execution_path_state(current_path, current_pc, OpCode::JUMPI, memory, stack, address, None);
         }
         
         // Explore each path
@@ -283,6 +388,46 @@ impl<'ctx> SymbolicEVMInterpreter<'ctx> {
         Ok(())
     }
 
+    /// Handle JUMP instruction
+    fn handle_jump(&mut self, contract: &Contract<'ctx>, pc: u64, call_context: &mut ScopeContext<'ctx>,
+                   visited_nodes: &mut VisitedNodes<'ctx>, current_path: &mut ExecutionPath<'ctx>,
+                   execution_path_list: &mut ExecutionPathList<'ctx>) -> DeFiResult<()> {
+        let current_pc = pc;
+        
+        // Pop destination
+        let dest = call_context.stack().pop()?;
+        let dest_val = dest.as_u64();
+        
+        // Record state
+        {
+            let mut cc = call_context.deep_copy();
+            let memory = cc.memory().clone();
+            let stack = cc.stack().clone();
+            let address = cc.contract().address();
+            self.update_execution_path_state(current_path, current_pc, OpCode::JUMP, memory, stack, address, None, None);
+        }
+        
+        // Determine next PC
+        if let Some(jump_pc) = dest_val {
+            if contract.get_op(jump_pc) == OpCode::JUMPDEST {
+                let mut next_ctx = call_context.deep_copy();
+                let mut copy_path = current_path.clone();
+                self.search_paths_by_dfs(contract, jump_pc, &mut next_ctx, visited_nodes, &mut copy_path, execution_path_list)?;
+            } else {
+                warn!("Invalid JUMP to {} (no JUMPDEST)", jump_pc);
+            }
+        } else {
+            // Symbolic target: conservatively continue to next instruction if possible
+            if (current_pc + 1) < contract.code().len() as u64 {
+                let mut next_ctx = call_context.deep_copy();
+                let mut copy_path = current_path.clone();
+                self.search_paths_by_dfs(contract, current_pc + 1, &mut next_ctx, visited_nodes, &mut copy_path, execution_path_list)?;
+            }
+        }
+        
+        Ok(())
+    }
+
     /// Handle call operations (CALL, STATICCALL, DELEGATECALL)
     fn handle_call_operations(&mut self, contract: &Contract<'ctx>, pc: u64, call_context: &mut ScopeContext<'ctx>,
                             current_path: &mut ExecutionPath<'ctx>, execution_path_list: &mut ExecutionPathList<'ctx>,
@@ -290,53 +435,64 @@ impl<'ctx> SymbolicEVMInterpreter<'ctx> {
         let current_pc = pc;
         
         // Update execution path
-        self.update_execution_path(current_path, call_context, current_pc, op, None, None);
+        {
+            let memory = call_context.memory().clone();
+            let stack = call_context.stack().clone();
+            let address = call_context.contract().address();
+            self.update_execution_path_state(current_path, current_pc, op, memory, stack, address, None);
+        }
         
-        let mut copy_path = current_path.clone();
-        let mut return_data_list = CrossContractReturnDataList::new();
-        
+        // Parse stack arguments according to opcode
         match op {
             OpCode::CALL => {
-                return_data_list = self.execute_call(pc, call_context, &mut copy_path, execution_path_list)?;
+                // Stack: gas, to, value, argsOffset, argsSize, retOffset, retSize
+                let _ret_size = call_context.stack().pop()?;
+                let _ret_offset = call_context.stack().pop()?;
+                let _args_size = call_context.stack().pop()?;
+                let _args_offset = call_context.stack().pop()?;
+                let value = call_context.stack().pop()?;
+                let to = call_context.stack().pop()?;
+                let _gas = call_context.stack().pop()?;
+                
+                // Construct symbolic input for call
+                let input = BV::new_const(call_context.z3_context, format!("call_input_{}", pc), 256);
+                let caller_addr = call_context.contract().address();
+                if let Some(evm) = self.evm.as_mut() {
+                    evm.call(caller_addr, to, input, value, current_path, execution_path_list)?;
+                }
             },
             OpCode::STATICCALL => {
-                return_data_list = self.execute_static_call(pc, call_context, &mut copy_path, execution_path_list)?;
+                // Stack: gas, to, argsOffset, argsSize, retOffset, retSize
+                let _ret_size = call_context.stack().pop()?;
+                let _ret_offset = call_context.stack().pop()?;
+                let _args_size = call_context.stack().pop()?;
+                let _args_offset = call_context.stack().pop()?;
+                let to = call_context.stack().pop()?;
+                let _gas = call_context.stack().pop()?;
+                
+                let input = BV::new_const(call_context.z3_context, format!("staticcall_input_{}", pc), 256);
+                let caller_addr = call_context.contract().address();
+                if let Some(evm) = self.evm.as_mut() {
+                    evm.static_call(caller_addr, to, input, current_path, execution_path_list)?;
+                }
             },
             OpCode::DELEGATECALL => {
-                return_data_list = self.execute_delegate_call(pc, call_context, &mut copy_path, execution_path_list)?;
+                // Stack: gas, to, argsOffset, argsSize, retOffset, retSize
+                let _ret_size = call_context.stack().pop()?;
+                let _ret_offset = call_context.stack().pop()?;
+                let _args_size = call_context.stack().pop()?;
+                let _args_offset = call_context.stack().pop()?;
+                let to = call_context.stack().pop()?;
+                let _gas = call_context.stack().pop()?;
+                
+                let input = BV::new_const(call_context.z3_context, format!("delegatecall_input_{}", pc), 256);
+                let self_address = call_context.contract().address();
+                let caller_addr = call_context.contract().address();
+                if let Some(evm) = self.evm.as_mut() {
+                    evm.delegate_call(caller_addr, self_address, to, input, current_path, execution_path_list)?;
+                }
             },
             _ => {}
-        }
-        
-        // Process return data - separate the data collection from self modification
-        let mut return_data_to_process = Vec::new();
-        if !return_data_list.is_empty() {
-            for return_data in return_data_list.iter() {
-                let path_length = return_data.path.len();
-                if let Some(err) = &return_data.path[path_length - 1].current_return_error {
-                    if err != "return token" && err != "stop token" {
-                        error!("There is an error: {}", err);
-                    } else {
-                        // Clone return data for later processing
-                        return_data_to_process.push((
-                            return_data.return_data.clone(),
-                            return_data.scope.deep_copy(),
-                            return_data.path.clone(),
-                        ));
-                    }
-                }
-            }
-        }
-        
-        // Process return data and continue execution
-        for (return_data_clone, mut next_call_context, mut new_copy_path) in return_data_to_process {
-            // Store the return data
-            self.return_data = Some(return_data_clone);
-            
-            // Update context with return data
-            let mut new_visited_nodes = VisitedNodes::new();
-            self.search_paths_by_dfs(contract, current_pc + 1, &mut next_call_context,
-                                   &mut new_visited_nodes, &mut new_copy_path, execution_path_list)?;
         }
         
         Ok(())
@@ -352,57 +508,131 @@ impl<'ctx> SymbolicEVMInterpreter<'ctx> {
         
         let current_pc = pc;
         
-        // Execute the operation
-        if let Some(operation) = self.table.get_operation(op) {
-            let (ret, err) = operation.execute(pc, self, call_context)?;
-            self.update_execution_path(current_path, call_context, current_pc, op, ret, err.clone());
-            
-            // Check if this is the end of the path
-            if (pc + 1) >= contract.code().len() as u64 || self.is_end_of_path(op) || err.is_some() {
-                if op == OpCode::RETURN || op == OpCode::STOP {
-                    execution_path_list.add_path(current_path.clone());
+        // Handle DUPn/SWAPn without jump table
+        match op {
+            OpCode::DUP1 | OpCode::DUP2 | OpCode::DUP3 | OpCode::DUP4 | OpCode::DUP5 | OpCode::DUP6 | OpCode::DUP7 | OpCode::DUP8 |
+            OpCode::DUP9 | OpCode::DUP10 | OpCode::DUP11 | OpCode::DUP12 | OpCode::DUP13 | OpCode::DUP14 | OpCode::DUP15 | OpCode::DUP16 => {
+                let n = match op { OpCode::DUP1=>1, OpCode::DUP2=>2, OpCode::DUP3=>3, OpCode::DUP4=>4, OpCode::DUP5=>5, OpCode::DUP6=>6, OpCode::DUP7=>7, OpCode::DUP8=>8, OpCode::DUP9=>9, OpCode::DUP10=>10, OpCode::DUP11=>11, OpCode::DUP12=>12, OpCode::DUP13=>13, OpCode::DUP14=>14, OpCode::DUP15=>15, OpCode::DUP16=>16, _=>1};
+                if let Some(val) = call_context.stack().back(n-1) {
+                    call_context.stack().push(val)?;
                 }
-            } else {
-                // Continue execution
-                let next_pc = pc + 1;
-                let mut next_call_context = call_context.deep_copy();
-                self.search_paths_by_dfs(contract, next_pc, &mut next_call_context, 
-                                       &mut VisitedNodes::new(), current_path, execution_path_list)?;
+                let memory = call_context.memory().clone();
+                let stack = call_context.stack().clone();
+                let address = call_context.contract().address();
+                self.update_execution_path_state(current_path, current_pc, op, memory, stack, address, None, None);
+                return Ok(());
             }
+            OpCode::SWAP1 | OpCode::SWAP2 | OpCode::SWAP3 | OpCode::SWAP4 | OpCode::SWAP5 | OpCode::SWAP6 | OpCode::SWAP7 | OpCode::SWAP8 |
+            OpCode::SWAP9 | OpCode::SWAP10 | OpCode::SWAP11 | OpCode::SWAP12 | OpCode::SWAP13 | OpCode::SWAP14 | OpCode::SWAP15 | OpCode::SWAP16 => {
+                let n = match op { OpCode::SWAP1=>1, OpCode::SWAP2=>2, OpCode::SWAP3=>3, OpCode::SWAP4=>4, OpCode::SWAP5=>5, OpCode::SWAP6=>6, OpCode::SWAP7=>7, OpCode::SWAP8=>8, OpCode::SWAP9=>9, OpCode::SWAP10=>10, OpCode::SWAP11=>11, OpCode::SWAP12=>12, OpCode::SWAP13=>13, OpCode::SWAP14=>14, OpCode::SWAP15=>15, OpCode::SWAP16=>16, _=>1};
+                let len = call_context.stack().len();
+                if len >= n+1 {
+                    call_context.stack().data.swap(len-1, len-1-n);
+                }
+                let memory = call_context.memory().clone();
+                let stack = call_context.stack().clone();
+                let address = call_context.contract().address();
+                self.update_execution_path_state(current_path, current_pc, op, memory, stack, address, None, None);
+                return Ok(());
+            }
+            // Handle PUSHn with correct PC advancement
+            OpCode::PUSH0 | OpCode::PUSH1 | OpCode::PUSH2 | OpCode::PUSH3 | OpCode::PUSH4 | OpCode::PUSH5 | OpCode::PUSH6 | OpCode::PUSH7 |
+            OpCode::PUSH8 | OpCode::PUSH9 | OpCode::PUSH10 | OpCode::PUSH11 | OpCode::PUSH12 | OpCode::PUSH13 | OpCode::PUSH14 | OpCode::PUSH15 |
+            OpCode::PUSH16 | OpCode::PUSH17 | OpCode::PUSH18 | OpCode::PUSH19 | OpCode::PUSH20 | OpCode::PUSH21 | OpCode::PUSH22 | OpCode::PUSH23 |
+            OpCode::PUSH24 | OpCode::PUSH25 | OpCode::PUSH26 | OpCode::PUSH27 | OpCode::PUSH28 | OpCode::PUSH29 | OpCode::PUSH30 | OpCode::PUSH31 | OpCode::PUSH32 => {
+                let push_len: u64 = match op {
+                    OpCode::PUSH0=>0, OpCode::PUSH1=>1, OpCode::PUSH2=>2, OpCode::PUSH3=>3, OpCode::PUSH4=>4, OpCode::PUSH5=>5, OpCode::PUSH6=>6, OpCode::PUSH7=>7,
+                    OpCode::PUSH8=>8, OpCode::PUSH9=>9, OpCode::PUSH10=>10, OpCode::PUSH11=>11, OpCode::PUSH12=>12, OpCode::PUSH13=>13, OpCode::PUSH14=>14, OpCode::PUSH15=>15,
+                    OpCode::PUSH16=>16, OpCode::PUSH17=>17, OpCode::PUSH18=>18, OpCode::PUSH19=>19, OpCode::PUSH20=>20, OpCode::PUSH21=>21, OpCode::PUSH22=>22, OpCode::PUSH23=>23,
+                    OpCode::PUSH24=>24, OpCode::PUSH25=>25, OpCode::PUSH26=>26, OpCode::PUSH27=>27, OpCode::PUSH28=>28, OpCode::PUSH29=>29, OpCode::PUSH30=>30, OpCode::PUSH31=>31, OpCode::PUSH32=>32,
+                    _=>0
+                };
+                let sym = BV::new_const(call_context.z3_context, format!("push_{}_at_{}", push_len, pc), 256);
+                call_context.stack().push(sym.clone())?;
+                let memory = call_context.memory().clone();
+                let stack = call_context.stack().clone();
+                let address = call_context.contract().address();
+                self.update_execution_path_state(current_path, current_pc, op, memory, stack, address, Some(sym), None);
+                // Advance PC by 1 + push_len
+                if (pc + 1 + push_len) < contract.code().len() as u64 {
+                    let mut next_ctx = call_context.deep_copy();
+                    let mut copy_path = current_path.clone();
+                    self.search_paths_by_dfs(contract, pc + 1 + push_len, &mut next_ctx, &mut VisitedNodes::new(), &mut copy_path, execution_path_list)?;
+                }
+                return Ok(());
+            }
+            // Handle LOGn (pop topics and data), no stack push
+            OpCode::LOG0 | OpCode::LOG1 | OpCode::LOG2 | OpCode::LOG3 | OpCode::LOG4 => {
+                let topics = match op { OpCode::LOG0=>0, OpCode::LOG1=>1, OpCode::LOG2=>2, OpCode::LOG3=>3, OpCode::LOG4=>4, _=>0 };
+                let _size = call_context.stack().pop()?;
+                let _offset = call_context.stack().pop()?;
+                for _ in 0..topics { let _ = call_context.stack().pop()?; }
+                let memory = call_context.memory().clone();
+                let stack = call_context.stack().clone();
+                let address = call_context.contract().address();
+                self.update_execution_path_state(current_path, current_pc, op, memory, stack, address, None, None);
+                return Ok(());
+            }
+            _ => {}
+        }
+        
+        // Execute the operation in a narrow scope to drop immutable borrow before recursive call
+        let err_opt = {
+            if let Some(operation) = self.table.get_operation(op) {
+                // Snapshot state before execution so SSTORE/L* see pre-pop stack
+                let pre_memory = call_context.memory().clone();
+                let pre_stack = call_context.stack().clone();
+                let pre_address = call_context.contract().address();
+                let (ret, err) = operation.execute(pc, self, call_context)?;
+                self.update_execution_path_state(current_path, current_pc, op, pre_memory, pre_stack, pre_address, ret, err.clone());
+                err
+            } else {
+                return Ok(());
+            }
+        };
+        
+        // Check if this is the end of the path
+        if (pc + 1) >= contract.code().len() as u64 || self.is_end_of_path(op) || err_opt.is_some() {
+            if op == OpCode::RETURN || op == OpCode::STOP {
+                execution_path_list.add_path(current_path.clone());
+            }
+        } else {
+            // Continue execution
+            let next_pc = pc + 1;
+            let mut next_call_context = call_context.deep_copy();
+            self.search_paths_by_dfs(contract, next_pc, &mut next_call_context, 
+                                   &mut VisitedNodes::new(), current_path, execution_path_list)?;
         }
         
         Ok(())
     }
 
     /// Execute CALL operation
-    fn execute_call(&mut self, pc: u64, call_context: &mut ScopeContext, 
-                  current_path: &mut ExecutionPath, execution_path_list: &mut ExecutionPathList) -> DeFiResult<CrossContractReturnDataList> {
+    fn execute_call(pc: u64, call_context: &mut ScopeContext, 
+                  current_path: &mut ExecutionPath, execution_path_list: &mut ExecutionPathList) -> DeFiResult<CrossContractReturnDataList<'ctx>> {
         // Implementation for CALL operation
         // This should extract call parameters and execute the call
         Ok(CrossContractReturnDataList::new())
     }
 
     /// Execute STATICCALL operation
-    fn execute_static_call(&mut self, pc: u64, call_context: &mut ScopeContext,
-                         current_path: &mut ExecutionPath, execution_path_list: &mut ExecutionPathList) -> DeFiResult<CrossContractReturnDataList> {
+    fn execute_static_call(pc: u64, call_context: &mut ScopeContext,
+                         current_path: &mut ExecutionPath, execution_path_list: &mut ExecutionPathList) -> DeFiResult<CrossContractReturnDataList<'ctx>> {
         // Implementation for STATICCALL operation
         Ok(CrossContractReturnDataList::new())
     }
 
     /// Execute DELEGATECALL operation
-    fn execute_delegate_call(&mut self, pc: u64, call_context: &mut ScopeContext,
-                            current_path: &mut ExecutionPath, execution_path_list: &mut ExecutionPathList) -> DeFiResult<CrossContractReturnDataList> {
+    fn execute_delegate_call(pc: u64, call_context: &mut ScopeContext,
+                            current_path: &mut ExecutionPath, execution_path_list: &mut ExecutionPathList) -> DeFiResult<CrossContractReturnDataList<'ctx>> {
         // Implementation for DELEGATECALL operation
         Ok(CrossContractReturnDataList::new())
     }
 
-    /// Update execution path
-    fn update_execution_path<'a>(&self, execution_path: &mut ExecutionPath<'a>, call_context: &mut ScopeContext<'a>,
-                           pc: u64, opcode: OpCode, ret: Option<BV<'a>>, return_error: Option<String>) {
-        // Clone all needed values in separate scopes to avoid multiple borrows
-        let memory = call_context.memory().clone();
-        let stack = call_context.stack().clone();
-        let address = call_context.contract().address();
+    /// Update execution path (stateless; avoids borrowing call_context)
+    fn update_execution_path_state(&self, execution_path: &mut ExecutionPath<'ctx>,
+                           pc: u64, opcode: OpCode, memory: SymbolicMemory<'ctx>, stack: SymbolicStack<'ctx>,
+                           address: BV<'ctx>, ret: Option<BV<'ctx>>, return_error: Option<String>) {
         let new_state = EVMExecutionState {
             current_opcode: opcode,
             current_pc: pc,
@@ -442,8 +672,8 @@ impl<'ctx> SymbolicEVMInterpreter<'ctx> {
     }
 
     /// Update visited nodes
-    fn update_visited_nodes(&self, current_pc: u64, next_pc: u64, stack: &SymbolicStack,
-                          visited_nodes: &mut VisitedNodes, memory: BV) {
+    fn update_visited_nodes(&self, current_pc: u64, next_pc: u64, stack: &SymbolicStack<'ctx>,
+                          visited_nodes: &mut VisitedNodes<'ctx>, memory: BV<'ctx>) {
         if !visited_nodes.contains_key(&current_pc) {
             visited_nodes.insert(current_pc, HashMap::new());
         }
@@ -489,13 +719,735 @@ impl<'ctx> SymbolicEVMInterpreter<'ctx> {
 
     /// Check if two symbolic values are equal
     fn are_symbolic_equal(&self, a: BV, b: BV) -> bool {
-        // This should implement proper symbolic equality checking
-        a.to_string() == b.to_string()
+        // Use a simple solver check: if (a != b) is UNSAT, then equal
+        // Note: use a fresh solver per check to avoid cross-contamination
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let a_ctx = a.simplify();
+        let b_ctx = b.simplify();
+        // Since a,b are tied to original ctx, fall back to string compare if different contexts
+        if a_ctx.get_ctx().z3_context != b_ctx.get_ctx().z3_context {
+            return a_ctx.to_string() == b_ctx.to_string();
+        }
+        let solver = Solver::new(a_ctx.get_ctx());
+        let not_eq = a_ctx._eq(&b_ctx).not();
+        solver.assert(&not_eq);
+        match solver.check() {
+            z3::SatResult::Unsat => true,
+            _ => false,
+        }
     }
 
     /// Check if this is the end of a path
     fn is_end_of_path(&self, op: OpCode) -> bool {
         matches!(op, OpCode::STOP | OpCode::RETURN | OpCode::REVERT | OpCode::INVALID | OpCode::SELFDESTRUCT)
+    }
+}
+
+// EVMOperation implementations (basic arithmetic/logic/memory/storage)
+struct OpPop;
+impl EVMOperation for OpPop {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _ = context.stack().pop()?;
+        Ok((None, None))
+    }
+}
+
+macro_rules! binop_bv {
+    ($name:ident, $method:ident) => {
+        struct $name;
+        impl EVMOperation for $name {
+            fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+                let b = context.stack().pop()?;
+                let a = context.stack().pop()?;
+                let res = a.$method(&b);
+                context.stack().push(res.clone())?;
+                Ok((Some(res), None))
+            }
+        }
+    };
+}
+
+binop_bv!(OpAdd, bvadd);
+binop_bv!(OpSub, bvsub);
+binop_bv!(OpMul, bvmul);
+binop_bv!(OpDiv, bvudiv);
+binop_bv!(OpAnd, bvand);
+binop_bv!(OpOr, bvor);
+binop_bv!(OpXor, bvxor);
+
+struct OpNot;
+impl EVMOperation for OpNot {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let a = context.stack().pop()?;
+        let width = a.get_size();
+        let all_ones = BV::from_u64(context.z3_context, u64::MAX, width);
+        let res = a.bvxor(&all_ones);
+        context.stack().push(res.clone())?;
+        Ok((Some(res), None))
+    }
+}
+
+struct OpMload;
+impl EVMOperation for OpMload {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let offset = context.stack().pop()?;
+        let loaded = match offset.as_u64() {
+            Some(off) => context.memory().get(off).cloned().unwrap_or_else(|| BV::new_const(context.z3_context, format!("mload_{}", off), 256)),
+            None => BV::new_const(context.z3_context, format!("mload_sym_{}", offset.to_string()), 256),
+        };
+        context.stack().push(loaded.clone())?;
+        Ok((Some(loaded), None))
+    }
+}
+
+struct OpMstore;
+impl EVMOperation for OpMstore {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let value = context.stack().pop()?;
+        let offset = context.stack().pop()?;
+        if let Some(off) = offset.as_u64() {
+            context.memory().set(off, value);
+        }
+        Ok((None, None))
+    }
+}
+
+struct OpSload;
+impl EVMOperation for OpSload {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let key = context.stack().pop()?;
+        let val = BV::new_const(context.z3_context, format!("SLOAD{}", key.to_string()), 256);
+        context.stack().push(val.clone())?;
+        Ok((Some(val), None))
+    }
+}
+
+struct OpSstore;
+impl EVMOperation for OpSstore {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _value = context.stack().pop()?;
+        let _key = context.stack().pop()?;
+        Ok((None, None))
+    }
+}
+
+struct OpSha3;
+impl EVMOperation for OpSha3 {
+    fn execute(&self, pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _size = context.stack().pop()?;
+        let _offset = context.stack().pop()?;
+        let hash = BV::new_const(context.z3_context, format!("SHA3_{}", pc), 256);
+        context.stack().push(hash.clone())?;
+        Ok((Some(hash), None))
+    }
+}
+
+struct OpReturn;
+impl EVMOperation for OpReturn {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _size = context.stack().pop()?;
+        let _offset = context.stack().pop()?;
+        let ret = BV::new_const(context.z3_context, "return_data", 256);
+        Ok((Some(ret), Some("return token".to_string())))
+    }
+}
+
+struct OpRevert;
+impl EVMOperation for OpRevert {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _size = context.stack().pop()?;
+        let _offset = context.stack().pop()?;
+        Ok((None, Some("revert token".to_string())))
+    }
+}
+
+struct OpStop;
+impl EVMOperation for OpStop {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, _context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        Ok((None, None))
+    }
+}
+
+struct OpReturnDataSize;
+impl EVMOperation for OpReturnDataSize {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let size = BV::new_const(context.z3_context, "returndatasize", 256);
+        context.stack().push(size.clone())?;
+        Ok((Some(size), None))
+    }
+}
+
+struct OpReturnDataCopy;
+impl EVMOperation for OpReturnDataCopy {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _size = context.stack().pop()?;
+        let _data_offset = context.stack().pop()?;
+        let _mem_offset = context.stack().pop()?;
+        Ok((None, None))
+    }
+}
+
+struct OpEq;
+impl EVMOperation for OpEq {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let b = context.stack().pop()?;
+        let a = context.stack().pop()?;
+        let cond = a._eq(&b);
+        let one = BV::from_u64(context.z3_context, 1, 256);
+        let zero = BV::from_u64(context.z3_context, 0, 256);
+        let res = cond.ite(&one, &zero);
+        context.stack().push(res.clone())?;
+        Ok((Some(res), None))
+    }
+}
+
+struct OpIsZero;
+impl EVMOperation for OpIsZero {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let a = context.stack().pop()?;
+        let zero_bv = BV::from_u64(context.z3_context, 0, 256);
+        let cond = a._eq(&zero_bv);
+        let one = BV::from_u64(context.z3_context, 1, 256);
+        let zero = BV::from_u64(context.z3_context, 0, 256);
+        let res = cond.ite(&one, &zero);
+        context.stack().push(res.clone())?;
+        Ok((Some(res), None))
+    }
+}
+
+macro_rules! cmpop_bv_bool {
+    ($name:ident, $method:ident) => {
+        struct $name;
+        impl EVMOperation for $name {
+            fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+                let b = context.stack().pop()?;
+                let a = context.stack().pop()?;
+                let cond = a.$method(&b);
+                let one = BV::from_u64(context.z3_context, 1, 256);
+                let zero = BV::from_u64(context.z3_context, 0, 256);
+                let res = cond.ite(&one, &zero);
+                context.stack().push(res.clone())?;
+                Ok((Some(res), None))
+            }
+        }
+    };
+}
+
+cmpop_bv_bool!(OpLt, bvult);
+cmpop_bv_bool!(OpGt, bvugt);
+cmpop_bv_bool!(OpSlt, bvslt);
+cmpop_bv_bool!(OpSgt, bvsgt);
+
+struct OpJumpdest;
+impl EVMOperation for OpJumpdest {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, _context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        Ok((None, None))
+    }
+}
+
+struct OpAddress;
+impl EVMOperation for OpAddress {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let addr = context.contract().address();
+        context.stack().push(addr.clone())?;
+        Ok((Some(addr), None))
+    }
+}
+
+struct OpCaller;
+impl EVMOperation for OpCaller {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let caller = context.contract().caller_bv();
+        context.stack().push(caller.clone())?;
+        Ok((Some(caller), None))
+    }
+}
+
+struct OpCallValue;
+impl EVMOperation for OpCallValue {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let v = context.contract().callvalue_bv();
+        context.stack().push(v.clone())?;
+        Ok((Some(v), None))
+    }
+}
+
+struct OpOrigin;
+impl EVMOperation for OpOrigin {
+    fn execute(&self, _pc: u64, interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let origin = interpreter.evm.as_ref().map(|e| e.origin.clone()).unwrap_or_else(|| BV::from_u64(context.z3_context, 0, 256));
+        context.stack().push(origin.clone())?;
+        Ok((Some(origin), None))
+    }
+}
+
+struct OpPc;
+impl EVMOperation for OpPc {
+    fn execute(&self, pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let bv = BV::from_u64(context.z3_context, pc, 256);
+        context.stack().push(bv.clone())?;
+        Ok((Some(bv), None))
+    }
+}
+
+struct OpMsize;
+impl EVMOperation for OpMsize {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let size_bytes = (context.memory().data.len() as u64) * 32;
+        let bv = BV::from_u64(context.z3_context, size_bytes, 256);
+        context.stack().push(bv.clone())?;
+        Ok((Some(bv), None))
+    }
+}
+
+struct OpGas;
+impl EVMOperation for OpGas {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let gas = BV::new_const(context.z3_context, "gas", 256);
+        context.stack().push(gas.clone())?;
+        Ok((Some(gas), None))
+    }
+}
+
+struct OpCalldataLoad;
+impl EVMOperation for OpCalldataLoad {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let offset = context.stack().pop()?;
+        let sym = BV::new_const(context.z3_context, format!("calldata_{}", offset.to_string()), 256);
+        context.stack().push(sym.clone())?;
+        Ok((Some(sym), None))
+    }
+}
+
+struct OpCalldataSize;
+impl EVMOperation for OpCalldataSize {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let size = BV::new_const(context.z3_context, "calldatasize", 256);
+        context.stack().push(size.clone())?;
+        Ok((Some(size), None))
+    }
+}
+
+struct OpCalldataCopy;
+impl EVMOperation for OpCalldataCopy {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let size = context.stack().pop()?;
+        let data_offset = context.stack().pop()?;
+        let mem_offset = context.stack().pop()?;
+        // No stack result; emulate memory write symbolically if offsets are concrete
+        if let (Some(moff), Some(_), Some(_)) = (mem_offset.as_u64(), data_offset.as_u64(), size.as_u64()) {
+            context.memory().set(moff, BV::new_const(context.z3_context, "calldata_copy", 256));
+        }
+        Ok((None, None))
+    }
+}
+
+struct OpCodeSize;
+impl EVMOperation for OpCodeSize {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let len = context.contract().code().len() as u64;
+        let bv = BV::from_u64(context.z3_context, len, 256);
+        context.stack().push(bv.clone())?;
+        Ok((Some(bv), None))
+    }
+}
+
+struct OpCodeCopy;
+impl EVMOperation for OpCodeCopy {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let size = context.stack().pop()?;
+        let code_offset = context.stack().pop()?;
+        let mem_offset = context.stack().pop()?;
+        if let (Some(moff), Some(_), Some(_)) = (mem_offset.as_u64(), code_offset.as_u64(), size.as_u64()) {
+            context.memory().set(moff, BV::new_const(context.z3_context, "code_copy", 256));
+        }
+        Ok((None, None))
+    }
+}
+
+struct OpExtCodeSize;
+impl EVMOperation for OpExtCodeSize {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let addr = context.stack().pop()?;
+        let size = BV::new_const(context.z3_context, format!("extcodesize_{}", addr.to_string()), 256);
+        context.stack().push(size.clone())?;
+        Ok((Some(size), None))
+    }
+}
+
+struct OpExtCodeCopy;
+impl EVMOperation for OpExtCodeCopy {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        // EVM order: address, destOffset, offset, size -> pop size, offset, destOffset, address
+        let size = context.stack().pop()?;
+        let code_offset = context.stack().pop()?;
+        let dest_offset = context.stack().pop()?;
+        let _address = context.stack().pop()?;
+        if let (Some(moff), Some(_), Some(_)) = (dest_offset.as_u64(), code_offset.as_u64(), size.as_u64()) {
+            context.memory().set(moff, BV::new_const(context.z3_context, "extcode_copy", 256));
+        }
+        Ok((None, None))
+    }
+}
+
+struct OpExtCodeHash;
+impl EVMOperation for OpExtCodeHash {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let addr = context.stack().pop()?;
+        let hash = BV::new_const(context.z3_context, format!("extcodehash_{}", addr.to_string()), 256);
+        context.stack().push(hash.clone())?;
+        Ok((Some(hash), None))
+    }
+}
+
+struct OpBalance;
+impl EVMOperation for OpBalance {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let addr = context.stack().pop()?;
+        let bal = BV::new_const(context.z3_context, format!("balance_{}", addr.to_string()), 256);
+        context.stack().push(bal.clone())?;
+        Ok((Some(bal), None))
+    }
+}
+
+struct OpShl;
+impl EVMOperation for OpShl {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let shift = context.stack().pop()?;
+        let value = context.stack().pop()?;
+        let res = value.bvshl(&shift);
+        context.stack().push(res.clone())?;
+        Ok((Some(res), None))
+    }
+}
+
+struct OpShr;
+impl EVMOperation for OpShr {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let shift = context.stack().pop()?;
+        let value = context.stack().pop()?;
+        let res = value.bvlshr(&shift);
+        context.stack().push(res.clone())?;
+        Ok((Some(res), None))
+    }
+}
+
+struct OpSar;
+impl EVMOperation for OpSar {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let shift = context.stack().pop()?;
+        let value = context.stack().pop()?;
+        let res = value.bvashr(&shift);
+        context.stack().push(res.clone())?;
+        Ok((Some(res), None))
+    }
+}
+
+struct OpByte;
+impl EVMOperation for OpByte {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let index = context.stack().pop()?;
+        let value = context.stack().pop()?;
+        let res = BV::new_const(context.z3_context, format!("BYTE{}_{}", index.to_string(), value.to_string()), 256);
+        context.stack().push(res.clone())?;
+        Ok((Some(res), None))
+    }
+}
+
+struct OpGasPrice;
+impl EVMOperation for OpGasPrice {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let v = BV::new_const(context.z3_context, "gasprice", 256);
+        context.stack().push(v.clone())?;
+        Ok((Some(v), None))
+    }
+}
+
+struct OpBaseFee;
+impl EVMOperation for OpBaseFee {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let v = BV::new_const(context.z3_context, "basefee", 256);
+        context.stack().push(v.clone())?;
+        Ok((Some(v), None))
+    }
+}
+
+struct OpChainId;
+impl EVMOperation for OpChainId {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let v = BV::new_const(context.z3_context, "chainid", 256);
+        context.stack().push(v.clone())?;
+        Ok((Some(v), None))
+    }
+}
+
+struct OpTimestamp;
+impl EVMOperation for OpTimestamp {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let v = BV::new_const(context.z3_context, "timestamp", 256);
+        context.stack().push(v.clone())?;
+        Ok((Some(v), None))
+    }
+}
+
+struct OpNumber;
+impl EVMOperation for OpNumber {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let v = BV::new_const(context.z3_context, "blocknumber", 256);
+        context.stack().push(v.clone())?;
+        Ok((Some(v), None))
+    }
+}
+
+struct OpSelfBalance;
+impl EVMOperation for OpSelfBalance {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let addr = context.contract().address();
+        let bal = BV::new_const(context.z3_context, format!("selfbalance_{}", addr.to_string()), 256);
+        context.stack().push(bal.clone())?;
+        Ok((Some(bal), None))
+    }
+}
+
+struct OpSelfDestruct;
+impl EVMOperation for OpSelfDestruct {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _beneficiary = context.stack().pop()?;
+        Ok((None, Some("selfdestruct token".to_string())))
+    }
+}
+
+struct OpMstore8;
+impl EVMOperation for OpMstore8 {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let value = context.stack().pop()?;
+        let offset = context.stack().pop()?;
+        if let Some(off) = offset.as_u64() {
+            // store only lowest byte
+            let byte = value.extract(7, 0);
+            // widen to 256 for our memory model
+            let widened = byte.sign_ext(248);
+            context.memory().set(off, widened);
+        }
+        Ok((None, None))
+    }
+}
+
+struct OpBlockHash;
+impl EVMOperation for OpBlockHash {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _block_number = context.stack().pop()?;
+        let hash = BV::new_const(context.z3_context, "blockhash", 256);
+        context.stack().push(hash.clone())?;
+        Ok((Some(hash), None))
+    }
+}
+
+struct OpCoinbase;
+impl EVMOperation for OpCoinbase {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let v = BV::new_const(context.z3_context, "coinbase", 256);
+        context.stack().push(v.clone())?;
+        Ok((Some(v), None))
+    }
+}
+
+struct OpGasLimit;
+impl EVMOperation for OpGasLimit {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let v = BV::new_const(context.z3_context, "gaslimit", 256);
+        context.stack().push(v.clone())?;
+        Ok((Some(v), None))
+    }
+}
+
+struct OpDifficulty;
+impl EVMOperation for OpDifficulty {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        // Post-merge maps to PREVRANDAO; keep symbolic
+        let v = BV::new_const(context.z3_context, "difficulty", 256);
+        context.stack().push(v.clone())?;
+        Ok((Some(v), None))
+    }
+}
+
+// Arithmetic operations
+struct OpSdiv;
+impl EVMOperation for OpSdiv {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let b = context.stack().pop()?;
+        let a = context.stack().pop()?;
+        let result = a.sdiv(&b);
+        context.stack().push(result.clone())?;
+        Ok((Some(result), None))
+    }
+}
+
+struct OpSmod;
+impl EVMOperation for OpSmod {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let b = context.stack().pop()?;
+        let a = context.stack().pop()?;
+        let result = a.srem(&b);
+        context.stack().push(result.clone())?;
+        Ok((Some(result), None))
+    }
+}
+
+struct OpAddmod;
+impl EVMOperation for OpAddmod {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let m = context.stack().pop()?;
+        let b = context.stack().pop()?;
+        let a = context.stack().pop()?;
+        let sum = a + b;
+        let result = sum.urem(&m);
+        context.stack().push(result.clone())?;
+        Ok((Some(result), None))
+    }
+}
+
+struct OpMulmod;
+impl EVMOperation for OpMulmod {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let m = context.stack().pop()?;
+        let b = context.stack().pop()?;
+        let a = context.stack().pop()?;
+        let product = a * b;
+        let result = product.urem(&m);
+        context.stack().push(result.clone())?;
+        Ok((Some(result), None))
+    }
+}
+
+struct OpExp;
+impl EVMOperation for OpExp {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let exponent = context.stack().pop()?;
+        let base = context.stack().pop()?;
+        // For symbolic execution, we keep it symbolic
+        let result = BV::new_const(context.z3_context, "exp_result", 256);
+        context.stack().push(result.clone())?;
+        Ok((Some(result), None))
+    }
+}
+
+struct OpSignextend;
+impl EVMOperation for OpSignextend {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let b = context.stack().pop()?;
+        let a = context.stack().pop()?;
+        let result = a.sign_ext(255);
+        context.stack().push(result.clone())?;
+        Ok((Some(result), None))
+    }
+}
+
+// Logging operations
+struct OpLog0;
+impl EVMOperation for OpLog0 {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _size = context.stack().pop()?;
+        let _offset = context.stack().pop()?;
+        // Log event (simplified for symbolic execution)
+        Ok((None, None))
+    }
+}
+
+struct OpLog1;
+impl EVMOperation for OpLog1 {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _topic0 = context.stack().pop()?;
+        let _size = context.stack().pop()?;
+        let _offset = context.stack().pop()?;
+        Ok((None, None))
+    }
+}
+
+struct OpLog2;
+impl EVMOperation for OpLog2 {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _topic1 = context.stack().pop()?;
+        let _topic0 = context.stack().pop()?;
+        let _size = context.stack().pop()?;
+        let _offset = context.stack().pop()?;
+        Ok((None, None))
+    }
+}
+
+struct OpLog3;
+impl EVMOperation for OpLog3 {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _topic2 = context.stack().pop()?;
+        let _topic1 = context.stack().pop()?;
+        let _topic0 = context.stack().pop()?;
+        let _size = context.stack().pop()?;
+        let _offset = context.stack().pop()?;
+        Ok((None, None))
+    }
+}
+
+struct OpLog4;
+impl EVMOperation for OpLog4 {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _topic3 = context.stack().pop()?;
+        let _topic2 = context.stack().pop()?;
+        let _topic1 = context.stack().pop()?;
+        let _topic0 = context.stack().pop()?;
+        let _size = context.stack().pop()?;
+        let _offset = context.stack().pop()?;
+        Ok((None, None))
+    }
+}
+
+// Contract creation
+struct OpCreate;
+impl EVMOperation for OpCreate {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _size = context.stack().pop()?;
+        let _offset = context.stack().pop()?;
+        let _value = context.stack().pop()?;
+        let address = BV::new_const(context.z3_context, "create_address", 256);
+        context.stack().push(address.clone())?;
+        Ok((Some(address), None))
+    }
+}
+
+struct OpCreate2;
+impl EVMOperation for OpCreate2 {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _salt = context.stack().pop()?;
+        let _size = context.stack().pop()?;
+        let _offset = context.stack().pop()?;
+        let _value = context.stack().pop()?;
+        let address = BV::new_const(context.z3_context, "create2_address", 256);
+        context.stack().push(address.clone())?;
+        Ok((Some(address), None))
+    }
+}
+
+struct OpCallcode;
+impl EVMOperation for OpCallcode {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        let _ret_size = context.stack().pop()?;
+        let _ret_offset = context.stack().pop()?;
+        let _args_size = context.stack().pop()?;
+        let _args_offset = context.stack().pop()?;
+        let _value = context.stack().pop()?;
+        let _gas = context.stack().pop()?;
+        let _to = context.stack().pop()?;
+        let result = BV::new_const(context.z3_context, "callcode_result", 256);
+        context.stack().push(result.clone())?;
+        Ok((Some(result), None))
+    }
+}
+
+struct OpInvalid;
+impl EVMOperation for OpInvalid {
+    fn execute(&self, _pc: u64, _interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+        // Invalid opcode - should cause exception
+        Err(DeFiAnalyzerError::ExecutionError("Invalid opcode executed".to_string()))
     }
 }
 
@@ -505,7 +1457,7 @@ pub struct ScopeContext<'ctx> {
     stack: SymbolicStack<'ctx>,
     contract: Contract<'ctx>,
     memory: SymbolicMemory<'ctx>,
-    z3_context: Context,
+    z3_context: &'ctx Context,
 }
 
 impl<'ctx> ScopeContext<'ctx> {
@@ -514,16 +1466,16 @@ impl<'ctx> ScopeContext<'ctx> {
             stack: SymbolicStack::new(1024),
             contract: Contract::new_with_context(ctx),
             memory: SymbolicMemory::new(ctx),
-            z3_context: Context::new(&Config::new()),
+            z3_context: ctx,
         }
     }
     
     pub fn deep_copy(&self) -> Self {
         Self {
             stack: self.stack.clone(),
-            contract: Contract::new_with_context(&self.z3_context),
+            contract: Contract::new_with_context(self.z3_context),
             memory: self.memory.clone(),
-            z3_context: Context::new(&Config::new()),
+            z3_context: self.z3_context,
         }
     }
 
@@ -542,7 +1494,6 @@ impl<'ctx> ScopeContext<'ctx> {
     pub fn contract(&self) -> &Contract<'ctx> {
         &self.contract
     }
-
 }
 
 /// Symbolic stack implementation
@@ -673,6 +1624,14 @@ impl<'ctx> Contract<'ctx> {
 
     pub fn address(&self) -> BV<'ctx> {
         self.address.clone()
+    }
+
+    pub fn caller_bv(&self) -> BV<'ctx> {
+        self.caller.clone()
+    }
+
+    pub fn callvalue_bv(&self) -> BV<'ctx> {
+        self.value.clone()
     }
 }
 

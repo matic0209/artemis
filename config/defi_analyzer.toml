@@ -1,0 +1,59 @@
+# DeFi Analyzer Configuration
+
+[general]
+# Enable symbolic execution analysis
+enable_symbolic_execution = true
+
+# Enable feature extraction
+enable_feature_extraction = true
+
+# Enable documentation comparison
+enable_documentation_comparison = true
+
+# Analysis timeout in seconds
+analysis_timeout_seconds = 30
+
+# Maximum analysis depth
+max_analysis_depth = 10
+
+# Minimum profit threshold for arbitrage opportunities (wei)
+min_profit_threshold = "100000000000000000"  # 0.1 ETH
+
+# Risk tolerance (0-100)
+risk_tolerance = 50
+
+# Enable real-time monitoring
+enable_realtime_monitoring = true
+
+# Monitoring interval in seconds
+monitoring_interval_seconds = 60
+
+# Contract addresses to monitor
+monitored_contracts = [
+    "0xA0b86a33E6441b8c4C8C0d4B0c8C0d4B0c8C0d4B0",  # Example contract 1
+    "0xB1c97a44F6442b9d5D1E5d5E1F5d5E1F5d5E1F5d5E",  # Example contract 2
+]
+
+[abi_cache]
+# Enable ABI caching
+enable_caching = true
+
+# Cache size limit
+cache_size_limit = 1000
+
+# Cache TTL in seconds
+cache_ttl_seconds = 3600  # 1 hour
+
+[performance]
+# Maximum concurrent analyses
+max_concurrent_analyses = 10
+
+# Enable parallel processing
+enable_parallel_processing = true
+
+# Memory usage limit (MB)
+memory_limit_mb = 1024  # 1 GB
+
+# CPU usage limit (percentage)
+cpu_limit_percentage = 80
+
