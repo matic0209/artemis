@@ -203,7 +203,7 @@ impl DeFiAnalyzerStrategy {
     }
 
     /// Get metrics summary
-    pub fn get_metrics_summary(&self) -> crate::metrics::MetricsSummary {
+    pub fn get_metrics_summary(&self) -> String {
         self.analyzer.get_metrics_summary()
     }
 }

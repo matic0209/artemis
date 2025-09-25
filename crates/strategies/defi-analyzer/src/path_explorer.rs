@@ -13,7 +13,7 @@ use z3::{Context, Config, ast::{BV, Bool, Ast}};
 use crate::{
     types::AnalysisEvent,
     error::{DeFiResult, DeFiAnalyzerError},
-    evm_interpreter_complete::{SEVM, SymbolicEVMInterpreter, EVMExecutionState, ExecutionPath, ExecutionPathList, SymbolicStack, SymbolicMemory, Contract, OpCode},
+    evm_interpreter::{SEVM, SymbolicEVMInterpreter, EVMExecutionState, ExecutionPath, ExecutionPathList, SymbolicStack, SymbolicMemory, Contract, OpCode},
 };
 
 /// Complete Path Explorer for DFS symbolic execution
@@ -121,7 +121,7 @@ impl<'ctx> PathExplorer<'ctx> {
         let start_time = Instant::now();
         self.start_time = start_time;
         self.stats = PathExplorerStats::default();
-        
+
         // Initialize execution state
         let initial_state = PathExplorer::initialize_execution_state_with_ctx(self.ctx, interpreter, event)?;
         
@@ -154,7 +154,7 @@ impl<'ctx> PathExplorer<'ctx> {
             current_evm_depth: 0,
             current_called_contract: BV::new_const(ctx, "Contract", 256),
         };
-        
+
         Ok(state)
     }
 
@@ -225,7 +225,7 @@ impl<'ctx> PathExplorer<'ctx> {
             // Simple path continuation
             self.stats.total_paths += 1;
         }
-        
+
         Ok(())
     }
 

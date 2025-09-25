@@ -6,10 +6,10 @@ use z3::{Context, Config, ast::BV};
 use tracing::{info, debug};
 
 use crate::{
-    evm_interpreter_complete::{SymbolicEVMInterpreter, ExecutionPath, EVMExecutionState, OpCode},
-    defi_feature_extractor_complete::{DeFiFeatureExtractor, DeFiFeature, ArbitrageOpportunity, ArbitrageType},
-    abi_parser_complete::{ABIParser, ABIElement, ABIParameter, ABIType},
-    path_explorer_complete::{PathExplorer, PathExplorerConfig},
+    evm_interpreter::{SymbolicEVMInterpreter, ExecutionPath, EVMExecutionState, OpCode},
+    defi_feature_extractor::{DeFiFeatureExtractor, DeFiFeature, ArbitrageOpportunity, ArbitrageType},
+    abi_parser::{ABIParser, ABIElement, ABIParameter},
+    path_explorer::{PathExplorer, PathExplorerConfig},
     types::{AnalysisEvent, RiskLevel},
     error::{DeFiResult, DeFiAnalyzerError},
 };
@@ -323,7 +323,7 @@ impl TestUtils {
     }
     
     /// Create mock arbitrage opportunity
-    pub fn create_mock_arbitrage_opportunity() -> ArbitrageOpportunity {
+    pub fn create_mock_arbitrage_opportunity() -> ArbitrageOpportunity<'static> {
         ArbitrageOpportunity {
             opportunity_type: ArbitrageType::PriceArbitrage,
             profit_potential: U256::from(1000),
@@ -335,7 +335,7 @@ impl TestUtils {
     }
     
     /// Create mock execution path
-    pub fn create_mock_execution_path() -> ExecutionPath {
+    pub fn create_mock_execution_path() -> ExecutionPath<'static> {
         let mut path = ExecutionPath::new();
         let state = EVMExecutionState {
             current_pc: 0,

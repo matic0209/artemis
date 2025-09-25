@@ -13,7 +13,6 @@ use crate::{
     },
     config::AnalyzerConfig,
     error::{DeFiResult, DeFiAnalyzerError},
-    metrics::{MetricsCollector, MetricsSummary},
     arbitrage_detector::{ArbitrageDetector, ArbitrageAlgorithm},
 };
 
@@ -27,8 +26,6 @@ pub struct DeFiAnalyzer {
     abi_cache: HashMap<Address, String>,
     /// Analysis statistics
     stats: AnalysisStats,
-    /// Metrics collector
-    metrics: MetricsCollector,
     /// Arbitrage detector
     arbitrage_detector: ArbitrageDetector,
 }
@@ -48,6 +45,20 @@ pub struct AnalysisStats {
     pub total_opportunities: u64,
     /// Total inconsistencies found
     pub total_inconsistencies: u64,
+    /// Events processed
+    pub events_processed: u64,
+    /// Actions generated
+    pub actions_generated: u64,
+    /// Success rate
+    pub success_rate: f64,
+    /// Memory usage
+    pub memory_usage: usize,
+    /// CPU usage
+    pub cpu_usage: f64,
+    /// Active analyses
+    pub active_analyses: u32,
+    /// Queue length
+    pub queue_length: u32,
 }
 
 impl DeFiAnalyzer {
@@ -58,7 +69,6 @@ impl DeFiAnalyzer {
             analysis_cache: HashMap::new(),
             abi_cache: HashMap::new(),
             stats: AnalysisStats::default(),
-            metrics: MetricsCollector::new(),
             arbitrage_detector: ArbitrageDetector::new(),
         }
     }
@@ -620,17 +630,27 @@ impl DeFiAnalyzer {
     }
 
     /// Get metrics summary
-    pub fn get_metrics_summary(&self) -> MetricsSummary {
-        self.metrics.get_summary()
+    pub fn get_metrics_summary(&self) -> String {
+        format!("Events processed: {}, Actions generated: {}, Success rate: {:.2}%", 
+                self.stats.events_processed, 
+                self.stats.actions_generated, 
+                self.stats.success_rate * 100.0)
     }
 
     /// Log performance report
     pub fn log_performance_report(&self) {
-        self.metrics.log_performance_report();
+        info!("Performance Report - Events: {}, Actions: {}, Success Rate: {:.2}%", 
+              self.stats.events_processed, 
+              self.stats.actions_generated, 
+              self.stats.success_rate * 100.0);
     }
 
     /// Update system metrics
     pub fn update_system_metrics(&mut self, memory_usage: usize, cpu_usage: f64, active_analyses: u32, queue_length: u32) {
-        self.metrics.update_system_metrics(memory_usage, cpu_usage, active_analyses, queue_length);
+        // Update system metrics
+        self.stats.memory_usage = memory_usage;
+        self.stats.cpu_usage = cpu_usage;
+        self.stats.active_analyses = active_analyses;
+        self.stats.queue_length = queue_length;
     }
 }

@@ -14,7 +14,7 @@ use z3::{Context, Config, ast::{BV, Bool, Ast}};
 use crate::{
     types::AnalysisEvent,
     error::{DeFiResult, DeFiAnalyzerError},
-    evm_interpreter_complete::{ExecutionPath, EVMExecutionState, OpCode},
+    evm_interpreter::{ExecutionPath, EVMExecutionState, OpCode},
 };
 
 /// Complete DeFi Feature Extractor implementation
