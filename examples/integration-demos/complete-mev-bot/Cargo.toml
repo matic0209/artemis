@@ -9,8 +9,8 @@ path = "src/main.rs"
 
 [dependencies]
 # Artemis integration
-artemis-core = { path = "../../crates/core/artemis-core" }
-defi-analyzer = { path = "../../crates/strategies/defi-analyzer" }
+artemis-core = { path = "../../../crates/core/artemis-core" }
+mev-arbitrage = { path = "../../../crates/strategies/mev-arbitrage" }
 
 # Core dependencies
 tokio = { version = "1.18", features = ["full"] }

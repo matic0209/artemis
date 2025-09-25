@@ -6,10 +6,10 @@ edition = "2021"
 [dependencies]
 
 ## eth
-artemis-core = { path = "../../artemis-core", default-features = false }
+artemis-core = { path = "../../core/artemis-core", default-features = false }
 bindings = { path = "./bindings", default-features = false }
 opensea-stream = { git = "https://github.com/FrankieIsLost/opensea-stream-rs"}
-opensea-v2 = { path = "../../clients/opensea-v2", default-features = false }
+opensea-v2 = { path = "../../core/clients/opensea-v2", default-features = false }
 
 ## async
 async-trait = "0.1.64"

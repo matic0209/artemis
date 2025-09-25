@@ -1,30 +1,77 @@
 [workspace]
 members = [
+    # 核心模块
+    "crates/core/artemis-core",
+    "crates/core/clients/chainbound",
+    "crates/core/clients/opensea-v2",
+    
+    # 策略模块
+    "crates/strategies/mev-arbitrage",
+    "crates/strategies/mev-arbitrage/graph-theory",
+    "crates/strategies/mev-arbitrage/symbolic-execution", 
+    "crates/strategies/mev-arbitrage/revm-validation",
+    "crates/strategies/mev-arbitrage/defense",
+    "crates/strategies/sandwich",
+    "crates/strategies/uniswap-arb",
+    "crates/strategies/opensea-arb",
+    
+    # 示例应用
+    "examples/quick-start",
+    "examples/alloy-quickstart",
+    "examples/defi-analyzer",
+    "examples/mev-share-arb",
+    "examples/integration-demos/complete-mev-bot",
+    "examples/integration-demos/mev-arbitrage-bot",
+    "examples/integration-demos/sandwich-bot",
+    
+    # 二进制文件
     "bin/artemis",
     "bin/cli",
-    "crates/artemis-core",
-    "crates/generator",
-    "crates/strategies/*",
-    "examples/sandwich-bot",
-    "crates/clients/*", 
-    "examples/*",
-]
-exclude = [
-    "crates/clients/chainbound",
 ]
 
-default-members = ["bin/artemis", "bin/cli"]
 resolver = "2"
 
 [workspace.dependencies]
-## eth
-serde = { version = "1.0.205", features = ["derive"] }
+# 核心依赖
+async-trait = "0.1.64"
+anyhow = "1.0.70"
+thiserror = "1.0.40"
+tracing = "0.1.37"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.18", features = ["full"] }
 
-[profile.release]
-panic = 'abort'
+# Ethereum 依赖
+alloy-primitives = "1.3.1"
+alloy-provider = { version = "1.0.27", features = ["ws", "reqwest"] }
+alloy-rpc-types-eth = "1.0.27"
+alloy-signer-local = "1.0.27"
 
-[profile.dev]
-panic = 'abort'
+# Z3 符号执行
+z3 = "0.12"
 
-## note: remove alloy patches; rely on fiber compat
+# 图论
+petgraph = "0.6"
 
+# 并发
+dashmap = "5"
+parking_lot = "0.12"
+crossbeam = "0.8"
+
+# 工具
+hex = "0.4"
+uuid = { version = "1.6", features = ["v4"] }
+chrono = "0.4.42"
+toml = "0.8"
+regex = "1.10"
+sha3 = "0.10"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Artemis Team"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/artemis-xyz/artemis"
+description = "Advanced MEV framework for Ethereum"
+keywords = ["mev", "arbitrage", "defi", "ethereum", "blockchain"]
+categories = ["cryptography", "finance", "network-programming"]

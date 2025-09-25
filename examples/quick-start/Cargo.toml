@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-artemis-core = { path = "../../crates/artemis-core" }
-opensea-sudo-arb = { path = "../../crates/strategies/opensea-sudo-arb" }
-opensea-v2 = { path = "../../crates/clients/opensea-v2" }
+artemis-core = { path = "../../crates/core/artemis-core" }
+opensea-sudo-arb = { path = "../../crates/strategies/opensea-arb" }
+opensea-v2 = { path = "../../crates/core/clients/opensea-v2" }
 alloy-provider = { version = "1.0.27", features = ["ws"] }
 alloy-transport-ws = { version = "1.0.27" }
 tokio = { version = "1.18", features = ["full"] }

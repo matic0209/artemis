@@ -5,7 +5,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-artemis-core = { path = "../../artemis-core" }
+artemis-core = { path = "../../core/artemis-core" }
 anyhow = "1.0.70"
 async-trait = "0.1.64"
 tracing = "0.1.37"
