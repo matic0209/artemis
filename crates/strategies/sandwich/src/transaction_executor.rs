@@ -107,7 +107,7 @@ impl TransactionExecutor {
         let net_profit = if final_weth_balance > initial_weth_balance {
             final_weth_balance - initial_weth_balance
         } else {
-            U256::zero()
+            U256::ZERO
         };
         
         // 计算价格影响
@@ -250,7 +250,7 @@ impl TransactionExecutor {
         use revm::primitives::keccak256;
         
         let mut input = [0u8; 64];
-        input[12..32].copy_from_slice(account.as_bytes());
+        input[12..32].copy_from_slice(account.as_slice());
         input[63] = slot;
         
         let hash = keccak256(&input);
@@ -288,46 +288,48 @@ impl TransactionBuilder {
         )?;
         
         Ok(TxEnv {
-            caller: RevmAddress::from_slice(searcher_address.as_bytes()),
+            tx_type: 2, // EIP-1559 transaction
+            caller: RevmAddress::from_slice(searcher_address.as_slice()),
             gas_limit: 200_000, // 前置交易 Gas 限制
-            gas_price: RevmU256::from_limbs(frontrun_gas_price.0),
-            transact_to: TransactTo::Call(
-                RevmAddress::from_slice(self.config.sandwich_contract.as_bytes())
-            ),
-            value: RevmU256::from_limbs(opportunity.optimal_input.0),
+            gas_price: frontrun_gas_price.to::<u128>(),
+            kind: TransactTo::Call(RevmAddress::from_slice(self.config.sandwich_contract.as_slice())),
+            value: RevmU256::from(opportunity.optimal_input),
             data: Bytes::from(call_data),
-            nonce: Some(0), // 简化：使用固定 nonce
+            nonce: 0, // 简化：使用固定 nonce
             chain_id: Some(1), // Mainnet
-            access_list: vec![],
+            access_list: Default::default(),
             gas_priority_fee: None,
             blob_hashes: vec![],
-            max_fee_per_blob_gas: None,
+            max_fee_per_blob_gas: 0,
+            authorization_list: Default::default(),
         })
     }
     
     /// 构建受害者交易环境
     pub fn build_victim_tx_env(&self, victim_tx: &Transaction) -> Result<TxEnv> {
         // 从受害者交易中提取信息
-        let caller = victim_tx.from().unwrap_or_default();
-        let to = victim_tx.to().unwrap_or_default();
-        let value = victim_tx.value().unwrap_or_default();
-        let gas_limit = victim_tx.gas().unwrap_or(100_000);
-        let gas_price = victim_tx.gas_price().unwrap_or_default();
-        let data = victim_tx.input().cloned().unwrap_or_default();
+        let caller = victim_tx.inner.signer();
+        let to = victim_tx.inner.inner().to().unwrap_or_default();
+        let value = victim_tx.inner.inner().value().unwrap_or_default();
+        let gas_limit = victim_tx.inner.inner().gas_limit().unwrap_or(100_000);
+        let gas_price = victim_tx.inner.inner().max_fee_per_gas().unwrap_or_default();
+        let data = victim_tx.inner.inner().input().cloned().unwrap_or_default();
         
         Ok(TxEnv {
-            caller: RevmAddress::from_slice(caller.as_bytes()),
+            tx_type: 2, // EIP-1559 transaction
+            caller: RevmAddress::from_slice(caller.as_slice()),
             gas_limit,
-            gas_price: RevmU256::from_limbs(gas_price.0),
-            transact_to: TransactTo::Call(RevmAddress::from_slice(to.as_bytes())),
-            value: RevmU256::from_limbs(value.0),
+            gas_price: gas_price.to::<u128>(),
+            kind: TransactTo::Call(RevmAddress::from_slice(to.as_slice())),
+            value: RevmU256::from(value),
             data: Bytes::from(data.0),
-            nonce: Some(1), // 简化实现
+            nonce: 1, // 简化实现
             chain_id: Some(1),
-            access_list: vec![],
+            access_list: Default::default(),
             gas_priority_fee: None,
             blob_hashes: vec![],
-            max_fee_per_blob_gas: None,
+            max_fee_per_blob_gas: 0,
+            authorization_list: Default::default(),
         })
     }
     
@@ -356,20 +358,20 @@ impl TransactionBuilder {
         )?;
         
         Ok(TxEnv {
-            caller: RevmAddress::from_slice(searcher_address.as_bytes()),
+            tx_type: 2, // EIP-1559 transaction
+            caller: RevmAddress::from_slice(searcher_address.as_slice()),
             gas_limit,
-            gas_price: RevmU256::from_limbs(backrun_gas_price.0),
-            transact_to: TransactTo::Call(
-                RevmAddress::from_slice(self.config.sandwich_contract.as_bytes())
-            ),
+            gas_price: backrun_gas_price.to::<u128>(),
+            kind: TransactTo::Call(RevmAddress::from_slice(self.config.sandwich_contract.as_slice())),
             value: RevmU256::ZERO, // 后置交易不需要 ETH 输入
             data: Bytes::from(call_data),
-            nonce: Some(2), // 简化：固定 nonce
+            nonce: 2, // 简化：固定 nonce
             chain_id: Some(1),
-            access_list: vec![],
+            access_list: Default::default(),
             gas_priority_fee: None,
             blob_hashes: vec![],
-            max_fee_per_blob_gas: None,
+            max_fee_per_blob_gas: 0,
+            authorization_list: Default::default(),
         })
     }
     
@@ -393,7 +395,7 @@ impl TransactionBuilder {
         
         // 参数编码
         call_data.extend_from_slice(&[0u8; 12]); // padding
-        call_data.extend_from_slice(intermediary_token.as_bytes());
+        call_data.extend_from_slice(intermediary_token.as_slice());
         call_data.extend_from_slice(&amount.to_be_bytes::<32>());
         
         Ok(call_data)
@@ -439,7 +441,7 @@ impl SandwichSimulationResult {
     pub fn failed(reason: &str, details: Option<String>) -> Self {
         Self {
             success: false,
-            net_profit: U256::zero(),
+            net_profit: U256::ZERO,
             frontrun_gas: 0,
             backrun_gas: 0,
             victim_gas: 0,
@@ -447,7 +449,7 @@ impl SandwichSimulationResult {
             price_impact: 0.0,
             simulation_accuracy: 0.0,
             failure_reason: Some(format!("{}: {:?}", reason, details)),
-            intermediate_token_balance: U256::zero(),
+            intermediate_token_balance: U256::ZERO,
         }
     }
     

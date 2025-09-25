@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 use tracing::{info, debug, warn, error};
 use serde::{Serialize, Deserialize};
 
+use artemis_core::eth::U256;
 use crate::{
     types::{AnalysisEvent, AnalysisAction},
     error::DeFiResult,

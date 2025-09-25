@@ -34,20 +34,12 @@ impl MockProvider {
 
 #[async_trait::async_trait]
 impl alloy_provider::Provider<alloy_network::Ethereum> for MockProvider {
-    async fn get_gas_price(&self) -> Result<U256, alloy_provider::ProviderError> {
-        Ok(self.gas_price)
+    fn root(&self) -> &alloy_provider::RootProvider<alloy_network::Ethereum> {
+        unimplemented!("Mock provider doesn't support root access")
     }
     
-    async fn get_block_number(&self) -> Result<u64, alloy_provider::ProviderError> {
-        Ok(self.block_number)
-    }
-    
-    async fn get_chain_id(&self) -> Result<u64, alloy_provider::ProviderError> {
-        Ok(self.chain_id)
-    }
-    
-    async fn get_transaction_count(&self, _address: Address) -> Result<u64, alloy_provider::ProviderError> {
-        Ok(42) // Mock nonce
+    fn client(&self) -> &alloy_rpc_client::ClientRef<alloy_network::Ethereum> {
+        unimplemented!("Mock provider doesn't support client access")
     }
 }
 
@@ -61,7 +53,7 @@ mod strategy_tests {
     /// 创建测试策略实例
     fn create_test_strategy() -> MevShareUniArb<MockProvider> {
         let provider = Arc::new(MockProvider::new());
-        let wallet = LocalWallet::from_str("0x0000000000000000000000000000000000000000000000000000000000000001")
+        let wallet = LocalWallet::from_str("0x0000000000000000000000000000000000000000000000000000000000000001").unwrap()
             .expect("Failed to create test wallet");
         let arb_contract = Address::from([1u8; 20]);
         

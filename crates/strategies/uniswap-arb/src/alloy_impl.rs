@@ -33,13 +33,13 @@
     #[derive(Debug, Clone)]
     pub struct MevShareUniArb<P> {
         /// Alloy provider.
-        provider: Arc<P>,
+        pub provider: Arc<P>,
         /// Maps uni v3 pool address to v2 pool information.
-        pool_map: HashMap<PrimitiveH160, V2PoolInfo>,
+        pub pool_map: HashMap<PrimitiveH160, V2PoolInfo>,
         /// Signer for transactions.
-        tx_signer: Arc<LocalWallet>,
+        pub tx_signer: Arc<LocalWallet>,
         /// Arb contract.
-        arb_contract: BlindArb::BlindArbInstance<Arc<P>>,
+        pub arb_contract: BlindArb::BlindArbInstance<Arc<P>>,
     }
 
     impl<P> MevShareUniArb<P>

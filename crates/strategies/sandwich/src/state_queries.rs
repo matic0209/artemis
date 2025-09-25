@@ -10,6 +10,7 @@ use artemis_core::{
     eth::{Address, U256},
     error::{ArtemisError, ResultExt},
 };
+use alloy_primitives::Uint;
 use alloy_provider::Provider;
 
 use crate::types::{PoolState, TokenInventory, BlockInfo};
@@ -107,15 +108,17 @@ where
     /// 获取当前区块信息
     pub async fn get_current_block_info(&self) -> Result<BlockInfo> {
         let block_number = self.provider.get_block_number().await
-            .with_context(|| "Failed to get block number")?;
+            .with_context(|| "Failed to get block number".to_string())?;
         
         let gas_price = self.provider.get_gas_price().await
-            .with_context(|| "Failed to get gas price")?;
+            .with_context(|| "Failed to get gas price".to_string())?;
         
         Ok(BlockInfo {
-            number: block_number,
-            gas_price,
-            timestamp: std::time::SystemTime::now(),
+            number: Uint::<64, 1>::try_from(block_number).unwrap(),
+            base_fee_per_gas: U256::from(gas_price),
+            timestamp: U256::from(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()),
+            gas_used: None,
+            gas_limit: None,
         })
     }
 
@@ -235,11 +238,12 @@ where
         // 简化实现 - 返回模拟数据
         Ok(PoolState {
             address: pool_address,
+            token0: Address::ZERO,
+            token1: Address::ZERO,
             reserve0: U256::from(1000000),
             reserve1: U256::from(2000000),
-            total_supply: U256::from(1000000),
-            k_last: U256::from(2000000000000u64),
-            block_timestamp_last: 0,
+            fee: 3000,
+            last_updated: 0,
         })
     }
 

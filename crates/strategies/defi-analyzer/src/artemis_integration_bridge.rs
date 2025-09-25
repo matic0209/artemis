@@ -7,7 +7,7 @@ use std::pin::Pin;
 use async_trait::async_trait;
 use anyhow::Result;
 use tokio_stream::{Stream, StreamExt};
-use tracing::{info, debug, error};
+use tracing::{info, debug, error, warn};
 
 use crate::{
     types::{AnalysisEvent, AnalysisAction},

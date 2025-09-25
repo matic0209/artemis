@@ -3,14 +3,8 @@ use artemis_core::{
     executors::flashbots_alloy_executor::FlashbotsAlloyBundle,
     eth::{Address, Hash, Transaction, U256, U64},
 };
-// Local Pool type (replacing cfmms dependency)
-#[derive(Debug, Clone)]
-pub struct Pool {
-    pub address: Address,
-    pub token0: Address,
-    pub token1: Address,
-    pub fee: u32,
-}
+// 使用统一的 Pool 定义
+pub use crate::pools::Pool;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -160,7 +154,7 @@ impl SandwichOpportunity {
     /// 获取受害者交易哈希（用于日志）
     pub fn victim_hashes(&self) -> Vec<Hash> {
         use alloy_consensus::transaction::Transaction as TransactionTrait;
-        self.victim_txs.iter().map(|tx| TransactionTrait::hash(&tx.inner)).collect()
+        self.victim_txs.iter().map(|tx| tx.inner.tx_hash()).cloned().collect()
     }
 
     /// 检查是否是有效的 sandwich 机会
@@ -191,8 +185,9 @@ impl From<SandwichBundle> for FlashbotsAlloyBundle {
         // 暂时返回简化的 bundle，实际使用时需要完整实现
         FlashbotsAlloyBundle {
             txs: vec![
-                sandwich.frontrun_tx,
-                sandwich.backrun_tx, // 简化：跳过受害者交易处理
+                // 简化：暂时使用空交易，实际使用时需要完整实现
+                // sandwich.frontrun_tx,
+                // sandwich.backrun_tx,
             ],
             target_block: Some(sandwich.target_block.to()),
             min_timestamp: None,

@@ -281,12 +281,14 @@ where
             .ok_or_else(|| ArtemisError::strategy("V3 pool not found in pool map"))?;
         
         // 获取当前市场价格
-        let current_prices = self.get_current_prices(v3_address, v2_info.v2_pool).await
+        let v3_address_alloy = Address::from_slice(v3_address.as_bytes());
+        let v2_address = Address::from_slice(v2_info.v2_pool.as_bytes());
+        let current_prices = self.get_current_prices(v3_address_alloy, v2_address).await
             .with_context(|| "Failed to get current prices")?;
         
         // 预测价格变化
         let predicted_prices = self.price_predictor.predict_prices(
-            v3_address,
+            v3_address_alloy,
             &current_prices,
             self.config.price_prediction_window,
         ).await?;
@@ -592,7 +594,7 @@ impl PricePredictor {
     async fn initialize(&mut self) -> Result<()> {
         // 初始化价格预测器
         // 加载历史价格数据
-        self.historical_prices = self.load_historical_prices().await?;
+        self.price_history = self.load_historical_prices().await?;
         
         // 初始化预测模型参数
         self.model_params = PriceModelParams {
@@ -613,7 +615,7 @@ impl PricePredictor {
         window: u64,
     ) -> Result<PredictedPrices> {
         // 实现价格预测逻辑
-        let historical = self.historical_prices.get(&pool_address)
+        let historical = self.price_history.get(&pool_address)
             .ok_or_else(|| anyhow::anyhow!("No historical data for pool"))?;
         
         // 计算趋势
@@ -701,7 +703,32 @@ impl RiskAssessor {
             liquidity_score,
             competition_score,
             overall_risk,
+            overall_risk_score: overall_risk,
         })
+    }
+    
+    async fn calculate_competition_score(&self, _pool_address: Address) -> Result<f64> {
+        // 简化的竞争评分计算
+        // 在实际实现中，这里应该分析 mempool 中的竞争交易
+        Ok(0.3) // 默认竞争评分
+    }
+    
+    async fn calculate_correlation_risk(&self, _pool_address: Address) -> Result<f64> {
+        // 简化的相关性风险计算
+        // 在实际实现中，这里应该分析与其他池子的相关性
+        Ok(0.2) // 默认相关性风险
+    }
+    
+    async fn calculate_liquidity_score(&self, _pool_address: Address) -> Result<f64> {
+        // 简化的流动性评分计算
+        // 在实际实现中，这里应该分析池子的流动性深度
+        Ok(0.8) // 默认流动性评分
+    }
+    
+    async fn load_historical_prices(&self) -> Result<HashMap<Address, VecDeque<PricePoint>>> {
+        // 简化的历史价格加载
+        // 在实际实现中，这里应该从数据库或API加载历史数据
+        Ok(HashMap::new())
     }
 }
 

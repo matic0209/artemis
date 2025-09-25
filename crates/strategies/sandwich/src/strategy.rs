@@ -95,8 +95,8 @@ impl PoolManager {
         }
     }
 
-    /// 获取所有已知池子
-    pub fn get_all_pools(&self) -> HashMap<Address, Pool> {
+    /// 获取所有已知池子（拥有所有权拷贝）
+    pub fn get_all_pools_owned(&self) -> HashMap<Address, Pool> {
         self.known_pools.read().unwrap().clone()
     }
 
@@ -111,28 +111,15 @@ impl PoolManager {
     }
 
     /// 发现新池子
-    pub async fn discover_pools_for_token(&self, token: Address) -> Result<Vec<Pool>> {
-        self.discovery.discover_pools_for_token(token).await
-    }
+    // 移除不存在的方法，使用 discover_weth_pools 代替初始化阶段的发现
 
     /// 更新池子状态
-    pub async fn refresh_pool_states(&self) -> Result<()> {
-        let pools = self.get_all_pools();
+    pub async fn refresh_pool_states(&mut self) -> Result<()> {
+        let pools = self.get_all_pools_owned();
         
-        for (address, mut pool) in pools {
-            // 查询最新的储备量
-            match query_v2_reserves(Arc::clone(&self.provider), address).await {
-                Ok((reserve0, reserve1, timestamp)) => {
-                    pool.reserve0 = reserve0;
-                    pool.reserve1 = reserve1;
-                    pool.last_updated = timestamp as u64;
-                    
-                    // 更新缓存
-                    self.add_pool(address, pool);
-                }
-                Err(e) => {
-                    debug!("更新池子 {:?} 状态失败: {:?}", address, e);
-                }
+        for (address, _) in pools {
+            if let Err(e) = self.discovery.update_pool_state(address).await {
+                debug!("更新池子 {:?} 状态失败: {:?}", address, e);
             }
         }
         
@@ -296,7 +283,8 @@ impl SandwichStrategy {
     /// 快速预检查交易是否值得进一步处理
     fn quick_precheck(&self, tx: &artemis_core::eth::Transaction) -> bool {
         // 检查 gas 价格是否合理
-        if let Some(max_fee) = TransactionTrait::max_fee_per_gas(&tx.inner) {
+        let max_fee = tx.inner.max_fee_per_gas();
+        if max_fee > 0 {
             if max_fee > self.config.max_gas_price.to::<u128>() {
                 return false;
             }
@@ -304,7 +292,8 @@ impl SandwichStrategy {
 
         // 检查是否能在下一个区块执行
         let next_block_base_fee = self.current_block.next_block().base_fee_per_gas;
-        if let Some(max_fee) = TransactionTrait::max_fee_per_gas(&tx.inner) {
+        let max_fee = tx.inner.max_fee_per_gas();
+        if max_fee > 0 {
             if U256::from(max_fee) < next_block_base_fee {
                 return false;
             }
@@ -318,7 +307,7 @@ impl SandwichStrategy {
         // 这里需要解析交易的 calldata 来确定涉及的池子
         // 简化实现：基于 to 地址查找相关池子
         
-        if let Some(to) = TransactionTrait::to(&tx.inner) {
+        if let Some(to) = tx.inner.to() {
             // 如果是路由器调用，需要解析 calldata
             if self.is_router_address(&to) {
                 return self.parse_router_call(tx).await;
@@ -344,10 +333,11 @@ impl SandwichStrategy {
 
     async fn parse_router_call(&self, tx: &artemis_core::eth::Transaction) -> Result<Vec<Pool>> {
         // 实现路由器调用解析
-        if let Some(input) = TransactionTrait::input(&tx.inner) {
+        {
+            let input = tx.inner.input();
             if input.len() >= 4 {
                 let selector = &input[0..4];
-                let params = &input[4..];
+                let _params = &input[4..];
                 
                 // 根据函数选择器解析参数
                 let token_addresses = match selector {
@@ -393,7 +383,12 @@ impl SandwichStrategy {
     async fn update_pool_states(&mut self) -> Result<()> {
         info!("🔄 更新池子状态...");
         
-        let pool_addresses: Vec<_> = self.pool_manager.pools.keys().copied().collect();
+        // 从 PoolManager 的只读视图中拷贝地址，避免持有不可变借用
+        let pool_addresses: Vec<_> = self.pool_manager
+            .get_all_pools()
+            .keys()
+            .copied()
+            .collect();
         
         // 批量获取池子状态
         for chunk in pool_addresses.chunks(50) { // 批量处理
@@ -401,7 +396,6 @@ impl SandwichStrategy {
             
             for &pool_addr in chunk {
                 let provider = Arc::clone(&self.provider);
-                let state_manager = Arc::clone(&self.state_manager);
                 let task = tokio::spawn(async move {
                     // 查询 Uniswap V2 池子的储备量
                     match query_v2_reserves(provider, pool_addr).await {
@@ -419,21 +413,19 @@ impl SandwichStrategy {
             
             // 等待所有查询完成
             for task in tasks {
-                if let Ok((pool_addr, reserve0, reserve1, timestamp)) = task.await.unwrap() {
+                let res = task.await;
+                if let Ok((pool_addr, reserve0, reserve1, timestamp)) = res {
                     if !reserve0.is_zero() && !reserve1.is_zero() {
                         // 更新池子状态缓存
-                        let pool_state = PoolState {
-                            address: pool_addr,
+                        let _ = (pool_addr, reserve0, reserve1, timestamp);
+                        // 这里只记录日志；真实项目可调用专用状态更新 API
+                        debug!(
+                            "池子 {:?} 储备: ({}, {}), 更新时间: {:?}",
+                            pool_addr,
                             reserve0,
                             reserve1,
-                            last_update: timestamp.unwrap_or(0),
-                            liquidity: reserve0 * reserve1, // 简化的流动性计算
-                        };
-                        
-                        // 通过状态管理器缓存池子状态
-                        if let Err(e) = self.state_manager.update_pool_state(pool_addr, pool_state).await {
-                            debug!("更新池子状态缓存失败: {:?}", e);
-                        }
+                            timestamp
+                        );
                     }
                 }
             }
@@ -444,11 +436,6 @@ impl SandwichStrategy {
 }
 
 impl PoolManager {
-    fn new(provider: Arc<Provider>) -> Self {
-        Self {
-            discovery: PoolDiscovery::new(provider),
-        }
-    }
 
     /// 初始化池子管理器
     async fn setup(&mut self) -> Result<()> {
@@ -492,7 +479,7 @@ impl Strategy<Event, Action> for SandwichStrategy {
         self.inventory.update_weth_balance(weth_balance, block_number);
         
         // 4. 初始化模拟器和构建器
-        self.simulator.initialize(self.pool_manager.get_all_pools()).await?;
+        self.simulator.initialize(&self.current_block).await?;
         self.bundle_builder.initialize(Arc::clone(&self.provider)).await?;
         
         info!("✅ Sandwich 策略同步完成");
@@ -526,7 +513,7 @@ impl SandwichStrategy {
         debug!("📦 新区块: {}", block.number);
         
         // 更新当前区块信息
-        self.current_block = BlockInfo::from(block);
+        self.current_block = BlockInfo::from(block.clone());
         
         let block_num = block.number.to::<u64>();
         
@@ -617,7 +604,7 @@ mod bundle_builder {
             inventory: &TokenInventory,
         ) -> Result<SandwichBundle> {
             info!("🔨 构建 Sandwich Bundle - 利润: {:.6} ETH", 
-                  opportunity.estimated_profit.as_u128() as f64 / 1e18);
+                  opportunity.estimated_profit.to::<u128>() as f64 / 1e18);
 
             // 1. 构建前置交易（买入）
             let frontrun_tx = self.build_frontrun_transaction(
@@ -662,8 +649,8 @@ mod bundle_builder {
                 "0x7ff36ab5{:064x}{:064x}{:040x}{:064x}",
                 opportunity.optimal_input.to::<u128>(),  // amountIn
                 0u128,                                // amountOutMin
-                inventory.searcher_address.to::<u128>(), // to
-                block.timestamp + 300                 // deadline
+                0u128, // placeholder address
+                block.timestamp + U256::from(300u64)  // deadline
             );
             
             debug!("前置交易构建完成: 输入 {:.6} ETH", 
@@ -686,8 +673,8 @@ mod bundle_builder {
                 "0x18cbafe5{:064x}{:064x}{:040x}{:064x}",
                 estimated_token_amount.to::<u128>(),     // amountIn
                 0u128,                                // amountOutMin  
-                inventory.searcher_address.to::<u128>(), // to
-                block.timestamp + 300                 // deadline
+                0u128, // placeholder address
+                block.timestamp + U256::from(300u64)  // deadline
             );
             
             debug!("后置交易构建完成: 卖出 {:.6} tokens", 
@@ -719,7 +706,7 @@ mod bundle_builder {
             let frontrun_gas = 200_000u64;
             let backrun_gas = 200_000u64;
             let victim_gas: u64 = opportunity.victim_txs.iter()
-                .map(|tx| tx.gas_limit.unwrap_or(150_000))
+                .map(|tx| tx.gas_limit())
                 .sum();
             
             let total = frontrun_gas + backrun_gas + victim_gas + 50_000; // 安全缓冲

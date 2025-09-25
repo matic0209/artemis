@@ -360,7 +360,7 @@ mod tests {
         assert!(config.validate().is_ok());
         
         // 测试无效配置
-        config.arbitrage.min_profit_threshold = artemis_core::eth::U256::zero();
+        config.arbitrage.min_profit_threshold = artemis_core::eth::U256::ZERO;
         assert!(config.validate().is_err());
         
         config.arbitrage.min_profit_threshold = artemis_core::eth::U256::from(100_000_000_000_000_000u64);

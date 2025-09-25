@@ -165,7 +165,7 @@ pub fn calculate_optimal_sandwich_input(
 pub async fn is_contract(provider: &artemis_core::eth::Provider, address: Address) -> bool {
     use alloy_provider::Provider as ProviderTrait;
     
-    match ProviderTrait::get_code(provider, address).await {
+    match provider.get_code_at(address).await {
         Ok(code) => !code.is_empty(),
         Err(_) => false,
     }

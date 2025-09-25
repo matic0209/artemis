@@ -1016,7 +1016,7 @@ impl EVMOperation for OpCallValue {
 
 struct OpOrigin;
 impl EVMOperation for OpOrigin {
-    fn execute(&self, _pc: u64, interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext) -> DeFiResult<(Option<BV>, Option<String>)> {
+    fn execute<'a>(&self, _pc: u64, interpreter: &SymbolicEVMInterpreter, context: &mut ScopeContext<'a>) -> DeFiResult<(Option<BV<'a>>, Option<String>)> {
         let origin = interpreter.evm.as_ref().map(|e| e.origin.clone()).unwrap_or_else(|| BV::from_u64(context.z3_context, 0, 256));
         context.stack().push(origin.clone())?;
         Ok((Some(origin), None))

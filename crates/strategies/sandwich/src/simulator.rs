@@ -87,7 +87,8 @@ impl SandwichSimulator {
         // 基于交易价值和池子流动性的快速估算
         let victim_value = opportunity.victim_txs
             .iter()
-            .filter_map(|tx| TransactionTrait::value(&tx.inner))
+            .map(|tx| tx.inner.value())
+            .map(|val| val.to::<u128>())
             .sum::<u128>();
 
         // 估算滑点影响
@@ -109,7 +110,8 @@ impl SandwichSimulator {
         // 基于受害者交易价值计算最优输入
         let victim_value = opportunity.victim_txs
             .iter()
-            .filter_map(|tx| TransactionTrait::value(&tx.inner))
+            .map(|tx| tx.inner.value())
+            .map(|val| val.to::<u128>())
             .sum::<u128>();
 
         // 最优输入通常是受害者交易价值的 2-5 倍
@@ -134,7 +136,7 @@ impl SandwichSimulator {
         // 设置搜索者账户初始状态
         if let Some(engine) = &self.revm_engine {
             let mut engine_guard = engine.lock().await;
-            engine_guard.state_manager.setup_searcher_account(
+            engine_guard.setup_searcher_account(
                 inventory.searcher_address,
                 inventory.weth_balance,
             )?;
@@ -149,7 +151,7 @@ impl SandwichSimulator {
         
         debug!("🧪 REVM 模拟完成 - 成功: {}, 净利润: {:.4} ETH", 
                result.success, 
-               result.net_profit.as_u128() as f64 / 1e18);
+               result.net_profit.to::<u128>() as f64 / 1e18);
         
         Ok(result)
     }
@@ -168,8 +170,8 @@ impl SandwichSimulator {
         
         let is_profitable = estimated_profit > gas_cost;
         debug!("💰 预估利润: {:.4} ETH, Gas成本: {:.4} ETH, 盈利: {}", 
-               estimated_profit.as_u128() as f64 / 1e18,
-               gas_cost.as_u128() as f64 / 1e18,
+               estimated_profit.to::<u128>() as f64 / 1e18,
+               gas_cost.to::<u128>() as f64 / 1e18,
                is_profitable);
         
         Ok(is_profitable)
@@ -193,7 +195,7 @@ impl SandwichSimulator {
         use crate::contracts::ERC20;
         
         // 1. 检查代币是否是合约
-        let code = ProviderTrait::get_code(&*self.provider, token).await?;
+        let code = self.provider.get_code_at(token).await?;
         if code.is_empty() {
             return Ok(false); // 不是合约
         }
@@ -347,7 +349,7 @@ pub mod bundle_builder {
             // 1. 计算 gas 价格（略高于受害者交易以确保优先执行）
             let victim_gas_price = opportunity.victim_txs
                 .iter()
-                .filter_map(|tx| TransactionTrait::max_fee_per_gas(&tx.inner))
+                .filter_map(|tx| Some(tx.inner.max_fee_per_gas()))
                 .max()
                 .unwrap_or(block.base_fee_per_gas.to::<u128>());
             

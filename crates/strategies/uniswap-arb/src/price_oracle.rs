@@ -170,7 +170,7 @@ where
         let call_data = Bytes::from(slot0_selector.to_vec());
         let call_result = self.provider
             .call(&alloy_rpc_types_eth::TransactionRequest {
-                to: Some(pool_address),
+                to: Some(alloy_primitives::Address::from_slice(pool_address.as_bytes())),
                 input: call_data.into(),
                 ..Default::default()
             })

@@ -184,17 +184,17 @@ impl PoolDiscovery {
                 Pool::UniswapV2(v2_pool) => {
                     // 更新 V2 池子储备量
                     let contract = UniswapV2Pool::new(pool_address, &self.provider);
-                    if let Ok((reserve0, reserve1, _)) = contract.getReserves().call().await {
-                        v2_pool.reserve_a = U256::from(reserve0);
-                        v2_pool.reserve_b = U256::from(reserve1);
+                    if let Ok(result) = contract.getReserves().call().await {
+                        v2_pool.reserve_a = U256::from(result.reserve0);
+                        v2_pool.reserve_b = U256::from(result.reserve1);
                     }
                 }
                 Pool::UniswapV3(v3_pool) => {
                     // 更新 V3 池子状态
                     let contract = crate::contracts::UniswapV3Pool::new(pool_address, &self.provider);
-                    if let Ok((sqrt_price_x96, tick, ..)) = contract.slot0().call().await {
-                        v3_pool.sqrt_price_x96 = U256::from(sqrt_price_x96);
-                        v3_pool.tick = tick;
+                    if let Ok(result) = contract.slot0().call().await {
+                        v3_pool.sqrt_price_x96 = U256::from(result.sqrtPriceX96);
+                        v3_pool.tick = result.tick.as_i32();
                     }
                     
                     if let Ok(liquidity) = contract.liquidity().call().await {

@@ -78,8 +78,9 @@ impl SandwichMempoolCollector {
     /// 检查交易是否可能被 sandwich
     fn is_sandwichable_tx(&self, tx: &Transaction) -> bool {
         // 检查交易价值
-        if let Some(value) = tx.inner.value() {
-            if *value < self.min_value_wei {
+        let value = tx.inner.value();
+        if value > U256::ZERO {
+            if value < self.min_value_wei {
                 return false;
             }
         }
@@ -94,7 +95,8 @@ impl SandwichMempoolCollector {
         // 检查是否与目标代币交互
         if !self.target_tokens.is_empty() {
             // 解析交易数据检查代币交互
-            if let Some(input) = TransactionTrait::input(&tx.inner) {
+            let input = tx.inner.input();
+            if !input.is_empty() {
                 let tokens = crate::utils::extract_tokens_from_calldata(input);
                 for token in tokens {
                     if self.target_tokens.contains(&token) {
@@ -105,7 +107,8 @@ impl SandwichMempoolCollector {
         }
 
         // 检查交易数据是否包含 DEX 相关的函数选择器
-        if let Some(input) = tx.inner.input() {
+        let input = tx.inner.input();
+        if !input.is_empty() {
             if input.len() >= 4 {
                 let selector = &input[0..4];
                 return self.is_dex_function_selector(selector);
@@ -143,7 +146,8 @@ impl SandwichMempoolCollector {
     /// 获取交易的预估滑点影响
     fn estimate_slippage_impact(&self, tx: &Transaction) -> f64 {
         // 基于交易价值估算滑点影响
-        if let Some(value) = tx.inner.value() {
+        let value = tx.inner.value();
+        if value > U256::ZERO {
             let value_eth = value.to::<u128>() as f64 / 1e18;
             
             match value_eth {
@@ -182,15 +186,14 @@ impl Collector<Transaction> for SandwichMempoolCollector {
                         // 快速预过滤
                         let is_potential_target = {
                             // 检查交易价值
-                            let value_ok = TransactionTrait::value(&txn.inner)
-                                .map_or(false, |value| value >= min_value_wei);
+                            let value_ok = txn.inner.value() >= min_value_wei;
                             
                             // 检查是否与目标路由器交互
-                            let router_ok = TransactionTrait::to(&txn.inner)
+                            let router_ok = txn.inner.to()
                                 .map_or(false, |to| target_routers.contains(&to));
                             
                             // 检查是否有足够的 gas（避免失败的交易）
-                            let gas_ok = TransactionTrait::gas_limit(&txn.inner) > 100_000;
+                            let gas_ok = txn.inner.gas_limit() > 100_000;
                             
                             value_ok && router_ok && gas_ok
                         };
@@ -262,19 +265,24 @@ impl TransactionFilter {
     /// 检查交易是否应该被过滤掉
     pub fn should_filter(&self, tx: &Transaction) -> bool {
         // 过滤 MEV 机器人交易
-        if self.known_bots.contains(&tx.inner.from()) {
-            return true;
+        let from_addr = tx.inner.signer();
+        if !from_addr.is_zero() {
+            if self.known_bots.contains(&from_addr) {
+                return true;
+            }
         }
 
         // 过滤过高的 gas 价格
-        if let Some(max_fee) = tx.inner.max_fee_per_gas() {
+        let max_fee = tx.inner.max_fee_per_gas();
+        if max_fee > 0 {
             if max_fee > self.max_gas_price.to::<u128>() {
                 return true;
             }
         }
 
         // 过滤黑名单代币
-        if let Some(input) = TransactionTrait::input(&tx.inner) {
+        let input = tx.inner.input();
+        if !input.is_empty() {
             let tokens = crate::utils::extract_tokens_from_calldata(input);
             for token in tokens {
                 if self.token_blacklist.contains(&token) {

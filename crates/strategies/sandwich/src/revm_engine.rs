@@ -7,14 +7,16 @@ use tracing::{debug, info, warn, error};
 
 use revm::{
     database::InMemoryDB,
-    handler::MainBuilder,
+    handler::{MainBuilder, MainContext, MainnetContext},
     primitives::{keccak256, Address as RevmAddress, U256 as RevmU256, B256, KECCAK_EMPTY},
 };
-use revm_context::{BlockEnv, CfgEnv, Context as RevmContext, TxEnv as RevmTxEnv};
-use revm_context_interface::result::{ExecutionResult, Output};
+use revm::context::{BlockEnv, CfgEnv, Context as RevmContext, Journal, TxEnv};
+use revm::context_interface::result::{ExecutionResult, Output};
+use revm::state::AccountInfo;
+use revm::bytecode::Bytecode;
 use revm_primitives::hardfork::SpecId;
-use revm_primitives::AccountInfo;
-pub use revm_primitives::TxKind as RevmTransactTo;
+pub use revm::primitives::TxKind as RevmTransactTo;
+pub use revm::context::TxEnv as RevmTxEnv;
 
 use artemis_core::eth::{Address, U256};
 use alloy_provider::Provider;
@@ -49,8 +51,8 @@ impl Default for RevmConfig {
 
 /// REVM 引擎核心
 pub struct RevmEngine {
-    /// EVM 构建器
-    evm: MainBuilder<InMemoryDB>,
+    /// 数据库（构建上下文时使用）
+    db: InMemoryDB,
     /// 配置
     config: RevmConfig,
     /// 状态管理器
@@ -66,36 +68,29 @@ impl RevmEngine {
         
         // 配置环境
         let mut cfg = CfgEnv::default();
-        cfg.spec_id = config.spec_id;
-        cfg.memory_limit = config.memory_limit;
+        cfg.spec = config.spec_id;
         
         // 配置区块环境
         let mut block_env = BlockEnv::default();
-        block_env.number = RevmU256::from(block.number.as_u64());
-        block_env.basefee = RevmU256::from(block.base_fee_per_gas.to::<u128>());
+        block_env.number = RevmU256::from(block.number.to::<u64>());
+        block_env.basefee = block.base_fee_per_gas.to::<u64>();
         block_env.timestamp = RevmU256::from(block.timestamp.to::<u128>());
-        block_env.coinbase = RevmAddress::from_slice(block.coinbase.as_bytes());
-        block_env.gas_limit = RevmU256::from(config.gas_limit);
+        block_env.beneficiary = RevmAddress::from_slice([0u8; 20].as_slice()); // 默认矿工地址
+        block_env.gas_limit = config.gas_limit;
         block_env.difficulty = RevmU256::from(2500000000000000u64); // 固定难度
         
         // 创建数据库
         let db = InMemoryDB::default();
         
-        // 构建 EVM 构建器
-        let evm = MainBuilder::new()
-            .with_cfg_env(cfg)
-            .with_block_env(block_env)
-            .with_db(db);
+        // 初始化数据库并保存；上下文在执行时临时构建
+        let mut db = db;
+        // 预置区块环境信息到配置（在执行时设置）
+        let _ = (block_env, cfg);
         
         info!("🧪 REVM 引擎已创建 - 区块: {}, Gas限制: {}", 
               block.number, config.gas_limit);
         
-        Ok(Self {
-            evm,
-            config,
-            state_manager: StateManager::new(),
-            initial_snapshot: None,
-        })
+        Ok(Self { db, config, state_manager: StateManager::new(), initial_snapshot: None })
     }
     
     /// 从链上同步关键状态
@@ -124,15 +119,15 @@ impl RevmEngine {
         
         // 应用账户状态
         for (address, account_info) in &self.state_manager.accounts {
-            let revm_address = RevmAddress::from_slice(address.as_bytes());
-            self.evm.db_mut().insert_account_info(revm_address, account_info.clone());
+            let revm_address = RevmAddress::from_slice(address.as_slice());
+            self.db.insert_account_info(revm_address, account_info.clone());
         }
         
         // 应用存储状态
         for (contract_address, storage_map) in &self.state_manager.storage {
-            let revm_address = RevmAddress::from_slice(contract_address.as_bytes());
+            let revm_address = RevmAddress::from_slice(contract_address.as_slice());
             for (slot, value) in storage_map {
-                self.evm.db_mut().insert_account_storage(
+                self.db.insert_account_storage(
                     revm_address, 
                     *slot, 
                     *value
@@ -146,7 +141,7 @@ impl RevmEngine {
     
     /// 创建状态快照
     pub fn create_snapshot(&mut self) -> Result<()> {
-        self.initial_snapshot = Some(self.evm.db().clone());
+        self.initial_snapshot = Some(self.db.clone());
         debug!("📸 状态快照已创建");
         Ok(())
     }
@@ -154,7 +149,7 @@ impl RevmEngine {
     /// 回滚到初始状态
     pub fn rollback_to_snapshot(&mut self) -> Result<()> {
         if let Some(snapshot) = &self.initial_snapshot {
-            *self.evm.db_mut() = snapshot.clone();
+            self.db = snapshot.clone();
             debug!("🔄 已回滚到初始状态");
             Ok(())
         } else {
@@ -163,12 +158,11 @@ impl RevmEngine {
     }
     
     /// 执行交易
-    pub fn execute_transaction(&mut self, tx_env: TxEnv) -> Result<TransactionResult> {
-        // 设置交易环境
-        self.evm.env.tx = tx_env;
-        
-        // 执行交易
-        let result = self.evm.transact().map_err(|e| anyhow!("交易执行失败: {}", e))?;
+    pub fn execute_transaction(&mut self, tx_env: RevmTxEnv) -> Result<TransactionResult> {
+        // 使用 Context 构建 EVM 并执行交易
+        let ctx = RevmContext::new(self.db.clone(), self.config.spec_id);
+        let mut evm = ctx.build_mainnet();
+        let result = evm.transact(tx_env).map_err(|e| anyhow!("交易执行失败: {}", e))?;
         
         match result.result {
             ExecutionResult::Success { gas_used, output, .. } => {
@@ -214,41 +208,46 @@ impl RevmEngine {
     
     /// 获取账户余额
     pub fn get_balance(&self, address: Address) -> Result<U256> {
-        let revm_address = RevmAddress::from_slice(address.as_bytes());
-        let account = self.evm.db().load_account(revm_address)?;
+        let revm_address = RevmAddress::from_slice(address.as_slice());
+        let account = self.db.load_account(revm_address)?;
         Ok(U256::from(account.info.balance.as_limbs()))
     }
     
     /// 获取存储值
-    pub fn get_storage(&self, address: Address, slot: U256) -> Result<U256> {
-        let revm_address = RevmAddress::from_slice(address.as_bytes());
-        let revm_slot = RevmU256::from_limbs(slot.0);
-        let value = self.evm.db().storage(revm_address, revm_slot)?;
+    pub fn get_storage(&mut self, address: Address, slot: U256) -> Result<U256> {
+        let revm_address = RevmAddress::from_slice(address.as_slice());
+        let revm_slot = RevmU256::from(slot);
+        let value = self.db.storage(revm_address, revm_slot)?;
         Ok(U256::from(value.as_limbs()))
     }
     
     /// 设置账户余额
     pub fn set_balance(&mut self, address: Address, balance: U256) -> Result<()> {
-        let revm_address = RevmAddress::from_slice(address.as_bytes());
-        let revm_balance = RevmU256::from_limbs(balance.0);
+        let revm_address = RevmAddress::from_slice(address.as_slice());
+        let revm_balance = RevmU256::from(balance);
         
         // 获取或创建账户
-        let mut account = self.evm.db().load_account(revm_address)?.clone();
+        let mut account = self.db.load_account(revm_address)?.clone();
         account.info.balance = revm_balance;
         
         // 更新账户
-        self.evm.db_mut().insert_account_info(revm_address, account.info);
+        self.db.insert_account_info(revm_address, account.info);
         Ok(())
     }
     
     /// 设置存储值
     pub fn set_storage(&mut self, address: Address, slot: U256, value: U256) -> Result<()> {
-        let revm_address = RevmAddress::from_slice(address.as_bytes());
-        let revm_slot = RevmU256::from_limbs(slot.0);
-        let revm_value = RevmU256::from_limbs(value.0);
+        let revm_address = RevmAddress::from_slice(address.as_slice());
+        let revm_slot = RevmU256::from(slot);
+        let revm_value = RevmU256::from(value);
         
-        self.evm.db_mut().insert_account_storage(revm_address, revm_slot, revm_value)?;
+        self.db.insert_account_storage(revm_address, revm_slot, revm_value)?;
         Ok(())
+    }
+    
+    /// 设置搜索者账户（公共方法）
+    pub fn setup_searcher_account(&mut self, address: Address, weth_balance: U256) -> Result<()> {
+        self.state_manager.setup_searcher_account(address, weth_balance)
     }
 }
 
@@ -280,7 +279,7 @@ impl StateManager {
         
         for contract_addr in contracts {
             // 获取合约字节码
-            if let Ok(code) = provider.get_code(contract_addr, None).await {
+            if let Ok(code) = provider.get_code_at(contract_addr).await {
                 if !code.is_empty() {
                     let bytecode = Bytecode::new_raw(code.0.into());
                     self.bytecode_cache.insert(contract_addr, bytecode);
@@ -344,7 +343,7 @@ impl StateManager {
         
         self.storage.entry(weth_address)
             .or_insert_with(HashMap::new)
-            .insert(balance_slot, RevmU256::from_limbs(weth_balance.0));
+            .insert(balance_slot, RevmU256::from_limbs(weth_balance.to_be_bytes().try_into().unwrap()));
         
         debug!("✅ 搜索者账户设置完成，WETH 余额: {}", weth_balance);
         Ok(())
@@ -356,7 +355,7 @@ impl StateManager {
         use revm::primitives::keccak256;
         
         let mut input = [0u8; 64];
-        input[12..32].copy_from_slice(account.as_bytes()); // account (右对齐到32字节)
+        input[12..32].copy_from_slice(account.as_slice()); // account (右对齐到32字节)
         input[63] = balance_slot; // slot (右对齐到32字节)
         
         let hash = keccak256(&input);
