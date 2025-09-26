@@ -7,6 +7,7 @@ use anyhow::Result;
 use artemis_core::{
     eth::{Address, U256, LocalWallet},
     error::ArtemisError,
+    types::Strategy,
 };
 
 use crate::{
