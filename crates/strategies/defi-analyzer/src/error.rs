@@ -46,32 +46,32 @@ pub enum DeFiAnalyzerError {
     AnalysisDepthExceeded { depth: u32, max_depth: u32 },
 
     /// Invalid input
-    #[error("Invalid input: {reason}")]
-    InvalidInput { reason: String },
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
 
     /// Computation error
-    #[error("Computation error: {reason}")]
-    ComputationError { reason: String },
+    #[error("Computation error: {0}")]
+    ComputationError(String),
 
     /// ABI fetch error
-    #[error("ABI fetch error: {reason}")]
-    ABIFetchError { reason: String },
+    #[error("ABI fetch error: {0}")]
+    ABIFetchError(String),
 
     /// Circuit breaker open
-    #[error("Circuit breaker open: {reason}")]
-    CircuitBreakerOpen { reason: String },
+    #[error("Circuit breaker open: {0}")]
+    CircuitBreakerOpen(String),
 
     /// Execution error
-    #[error("Execution error: {reason}")]
-    ExecutionError { reason: String },
+    #[error("Execution error: {0}")]
+    ExecutionError(String),
 
     /// Z3 error
-    #[error("Z3 error: {reason}")]
-    Z3Error { reason: String },
+    #[error("Z3 error: {0}")]
+    Z3Error(String),
 
     /// Contract call error
-    #[error("Contract call error: {reason}")]
-    ContractCallError { reason: String },
+    #[error("Contract call error: {0}")]
+    ContractCallError(String),
 }
 
 /// Result type for DeFi Analyzer operations
@@ -141,13 +141,13 @@ impl DeFiAnalyzerError {
             DeFiAnalyzerError::NetworkError { .. } => true,
             DeFiAnalyzerError::InsufficientResources { .. } => true,
             DeFiAnalyzerError::AnalysisDepthExceeded { .. } => true,
-            DeFiAnalyzerError::InvalidInput { .. } => false,
-            DeFiAnalyzerError::ComputationError { .. } => true,
-            DeFiAnalyzerError::ABIFetchError { .. } => true,
-            DeFiAnalyzerError::CircuitBreakerOpen { .. } => true,
-            DeFiAnalyzerError::ExecutionError { .. } => true,
-            DeFiAnalyzerError::Z3Error { .. } => true,
-            DeFiAnalyzerError::ContractCallError { .. } => true,
+            DeFiAnalyzerError::InvalidInput(_) => false,
+            DeFiAnalyzerError::ComputationError(_) => true,
+            DeFiAnalyzerError::ABIFetchError(_) => true,
+            DeFiAnalyzerError::CircuitBreakerOpen(_) => true,
+            DeFiAnalyzerError::ExecutionError(_) => true,
+            DeFiAnalyzerError::Z3Error(_) => true,
+            DeFiAnalyzerError::ContractCallError(_) => true,
             DeFiAnalyzerError::ConfigurationError { .. } => false,
         }
     }

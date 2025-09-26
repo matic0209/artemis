@@ -59,13 +59,16 @@ impl IntegrationExample {
         
         // Process analysis event
         let event = AnalysisEvent {
-            block_number: 18500000,
+            event_type: EventType::MempoolTransaction,
+            contract_address: Address::from([2u8; 20]),
+            tx_data: Some(vec![0xa9, 0x05, 0x9c, 0xbb]), // swapExactTokensForTokens selector
+            transaction_data: Some(vec![0xa9, 0x05, 0x9c, 0xbb]),
             transaction_hash: [1u8; 32],
-            contract_address: [2u8; 20],
-            transaction_data: vec![0xa9, 0x05, 0x9c, 0xbb], // swapExactTokensForTokens selector
-            event_type: "mempool_analysis".to_string(),
             event_data: serde_json::to_vec(&state).unwrap_or_default(),
+            event_kind: "mempool_analysis".to_string(),
+            block_number: 18500000,
             timestamp: 1700000000,
+            metadata: HashMap::new(),
         };
         
         let actions = strategy.process_event(event).await;
