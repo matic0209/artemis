@@ -241,15 +241,15 @@ impl ArtemisMEVStrategy {
         // Extract contract information from event
         let contract_info = crate::mev_arbitrage_engine::ContractInfo {
             address: event.contract_address.into(),
-            bytecode: event.transaction_data.clone(),
+            bytecode: event.tx_data.clone().unwrap_or_default(),
             abi: None,
         };
         
         let transaction_data = crate::mev_arbitrage_engine::TransactionData {
-            hash: event.transaction_hash,
+            hash: event.contract_address.into(), // 使用contract_address作为hash
             from: alloy_primitives::Address::ZERO, // Would extract from event
             to: Some(event.contract_address.into()),
-            data: event.transaction_data.clone(),
+            data: event.tx_data.clone().unwrap_or_default(),
             value: alloy_primitives::U256::ZERO,
         };
         
@@ -287,13 +287,12 @@ impl ArtemisMEVCollector {
     async fn create_mock_event_stream(&self) -> Result<impl Stream<Item = AnalysisEvent>> {
         let events = vec![
             AnalysisEvent {
+                event_type: EventType::Arbitrage,
+                contract_address: Address::from([2u8; 20]),
+                tx_data: Some(vec![0xa9, 0x05, 0x9c, 0xbb]), // Swap selector
                 block_number: 18_500_000,
-                transaction_hash: [1u8; 32],
-                contract_address: [2u8; 20],
-                transaction_data: vec![0xa9, 0x05, 0x9c, 0xbb], // Swap selector
-                event_type: "artemis_mev_event".to_string(),
-                event_data: vec![],
                 timestamp: 1700000000,
+                metadata: HashMap::new(),
             }
         ];
         
