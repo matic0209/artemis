@@ -17,6 +17,7 @@ use tracing::{info, debug, warn, error};
 // Full Artemis integration (working with fixed artemis-core)
 use artemis_core::{
     types::{Collector, Executor, Strategy, CollectorStream},
+    eth::{Log, PendingTx},
     engine::Engine,
     collectors::{
         block_collector::{BlockCollector, NewBlock},
@@ -286,7 +287,7 @@ impl Strategy<AnalysisEvent, AnalysisAction> for CompleteMEVStrategy {
                             self.stats.revm_validations_passed += 1;
                         }
                     },
-                    Err(e) => debug!("Validation failed for action {}: {}", action.action_id, e),
+                    Err(e) => debug!("Validation failed for action {:?}: {}", action.action_type, e),
                 }
             }
             

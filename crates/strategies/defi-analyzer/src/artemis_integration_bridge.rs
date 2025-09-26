@@ -4,13 +4,15 @@
 //! implementing the required Artemis traits and integrating with Artemis components.
 
 use std::pin::Pin;
+use std::collections::HashMap;
 use async_trait::async_trait;
 use anyhow::Result;
 use tokio_stream::{Stream, StreamExt};
 use tracing::{info, debug, error, warn};
+use artemis_core::eth::Address;
 
 use crate::{
-    types::{AnalysisEvent, AnalysisAction},
+    types::{AnalysisEvent, AnalysisAction, EventType},
     mev_arbitrage_engine::MEVArbitrageEngine,
     mev_defense_strategies::MEVDefenseEngine,
     production_config::ProductionConfig,
@@ -193,7 +195,7 @@ impl artemis_core::types::Strategy<AnalysisEvent, AnalysisAction> for ArtemisMEV
                             contract_address: event.contract_address,
                             target_address: event.contract_address,
                             parameters: crate::types::AnalysisParameters { abi_json: None, function_name: None, depth: 0, timeout_seconds: 0, config: std::collections::HashMap::new() },
-                            action_id: format!("mev_arb_{}", event.block_number),
+                            // action_id: format!("mev_arb_{}", event.block_number),
                             calldata: vec![],
                             value: alloy_primitives::U256::ZERO,
                             gas_limit: 500_000,
@@ -304,7 +306,7 @@ impl ArtemisMEVCollector {
 #[async_trait]
 impl artemis_core::types::Executor<AnalysisAction> for ArtemisMEVExecutor {
     async fn execute(&self, action: AnalysisAction) -> Result<()> {
-        info!("⚡ Executing Artemis MEV action: {}", action.action_id);
+        info!("⚡ Executing Artemis MEV action: {:?}", action.action_type);
         
         // Route to appropriate executor based on action type
         match action.action_type {
@@ -342,12 +344,12 @@ impl ArtemisMEVExecutor {
     }
     
     async fn execute_liquidity_action(&self, action: &AnalysisAction) -> Result<()> {
-        info!("💧 Executing liquidity action: {}", action.action_id);
+        info!("💧 Executing liquidity action: {:?}", action.action_type);
         Ok(())
     }
     
     async fn execute_risk_management(&self, action: &AnalysisAction) -> Result<()> {
-        info!("🛡️ Executing risk management: {}", action.action_id);
+        info!("🛡️ Executing risk management: {:?}", action.action_type);
         Ok(())
     }
 }
