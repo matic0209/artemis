@@ -205,7 +205,7 @@ async fn run_benchmark(args: Args) -> Result<()> {
     let provider = Arc::new(provider);
     
     // Run benchmark
-    let benchmark = PerformanceBenchmark::new(provider, args.benchmark_iterations);
+    let benchmark = PerformanceBenchmark::new(provider.clone(), args.benchmark_iterations);
     
     tracing::info!("Running RPC performance test...");
     let rpc_latency = benchmark.benchmark_rpc_calls().await?;
