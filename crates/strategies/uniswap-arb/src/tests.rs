@@ -73,10 +73,16 @@ mod strategy_tests {
     fn create_test_mev_event() -> MevShareEvent {
         MevShareEvent {
             hash: H256::from([1u8; 32]),
-            logs: vec![mev_share::sse::Log {
+            logs: vec![alloy_rpc_types_eth::Log {
                 address: H160::from([2u8; 20]),
                 topics: vec![],
                 data: vec![],
+                block_hash: None,
+                block_number: None,
+                log_index: None,
+                removed: false,
+                transaction_hash: None,
+                transaction_index: None,
             }],
             txs: vec![],
             bundle_transactions: vec![],
@@ -148,10 +154,16 @@ fn create_test_strategy() -> MevShareUniArb<MockProvider> {
 fn create_test_mev_event() -> mev_share::sse::Event {
     mev_share::sse::Event {
         hash: primitive_types::H256::from([1u8; 32]),
-        logs: vec![mev_share::sse::Log {
+        logs: vec![alloy_rpc_types_eth::Log {
             address: primitive_types::H160::from([2u8; 20]),
             topics: vec![],
             data: vec![],
+            block_hash: None,
+            block_number: None,
+            log_index: None,
+            removed: false,
+            transaction_hash: None,
+            transaction_index: None,
         }],
         txs: vec![],
         bundle_transactions: vec![],

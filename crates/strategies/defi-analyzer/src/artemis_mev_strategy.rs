@@ -17,7 +17,7 @@ use tracing::{info, debug, warn, error};
 // Full Artemis integration (working with fixed artemis-core)
 use artemis_core::{
     types::{Collector, Executor, Strategy, CollectorStream},
-    eth::{Log, PendingTx},
+    eth::Log,
     engine::Engine,
     collectors::{
         block_collector::{BlockCollector, NewBlock},

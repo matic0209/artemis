@@ -12,6 +12,14 @@ pub struct AnalysisEvent {
     pub contract_address: Address,
     /// Transaction data
     pub tx_data: Option<Vec<u8>>,
+    /// Transaction data (for compatibility)
+    pub transaction_data: Option<Vec<u8>>,
+    /// Transaction hash
+    pub transaction_hash: [u8; 32],
+    /// Event data
+    pub event_data: Vec<u8>,
+    /// Event kind
+    pub event_kind: String,
     /// Block number
     pub block_number: u64,
     /// Timestamp
@@ -42,10 +50,47 @@ pub struct AnalysisAction {
     pub action_type: ActionType,
     /// Target contract
     pub contract_address: Address,
+    /// Target address (for compatibility)
+    pub target_address: Address,
     /// Analysis parameters
     pub parameters: AnalysisParameters,
     /// Priority (0-100)
     pub priority: u8,
+    /// Action ID (for compatibility)
+    pub action_id: String,
+    /// Calldata
+    pub calldata: Vec<u8>,
+    /// Value
+    pub value: U256,
+    /// Gas limit
+    pub gas_limit: U256,
+    /// Gas price
+    pub gas_price: U256,
+    /// Nonce
+    pub nonce: u64,
+    /// Chain ID
+    pub chain_id: u64,
+    /// Target block
+    pub target_block: u64,
+    /// Risk level
+    pub risk_level: RiskLevel,
+    /// Expected profit
+    pub expected_profit: U256,
+    /// Min timestamp
+    pub min_timestamp: u64,
+    /// Max timestamp
+    pub max_timestamp: u64,
+    /// Metadata
+    pub metadata: HashMap<String, String>,
+}
+
+/// Risk level
+#[derive(Debug, Clone, PartialEq)]
+pub enum RiskLevel {
+    Low,
+    Medium,
+    High,
+    Critical,
 }
 
 /// Action types
@@ -194,16 +239,6 @@ pub struct ArbitrageOpportunity {
     pub strategy_description: String,
 }
 
-/// Risk levels
-#[derive(Debug, Clone)]
-pub enum RiskLevel {
-    /// Low risk
-    Low,
-    /// Medium risk
-    Medium,
-    /// High risk
-    High,
-}
 
 /// Risk assessment
 #[derive(Debug, Clone)]
