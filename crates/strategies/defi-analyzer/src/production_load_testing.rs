@@ -248,13 +248,16 @@ impl LoadTestSuite {
         
         for i in 0..1000 {
             let event = AnalysisEvent {
-                block_number: base_block + i,
-                transaction_hash: [i as u8; 32],
-                contract_address: self.generate_random_address(i),
-                transaction_data: self.generate_random_tx_data(i),
                 event_type: self.generate_event_type(i),
+                contract_address: self.generate_random_address(i),
+                tx_data: Some(self.generate_random_tx_data(i)),
+                transaction_data: Some(self.generate_random_tx_data(i)),
+                transaction_hash: [i as u8; 32],
                 event_data: vec![],
+                event_kind: "load_test".to_string(),
+                block_number: base_block + i,
                 timestamp: 1700000000 + i * 12,
+                metadata: HashMap::new(),
             };
             events.push(event);
         }
@@ -401,13 +404,16 @@ impl PerformanceBenchmark {
         
         for i in 0..iterations {
             let event = AnalysisEvent {
-                block_number: 18_500_000 + i,
+                event_type: EventType::MempoolTransaction,
+                contract_address: Address::from([i as u8; 20]),
+                tx_data: Some(vec![0xa9, 0x05, 0x9c, 0xbb, 0, 0, 0, 0]),
+                transaction_data: Some(vec![0xa9, 0x05, 0x9c, 0xbb, 0, 0, 0, 0]),
                 transaction_hash: [i as u8; 32],
-                contract_address: [i as u8; 20],
-                transaction_data: vec![0xa9, 0x05, 0x9c, 0xbb, 0, 0, 0, 0],
-                event_type: "benchmark".to_string(),
                 event_data: vec![],
+                event_kind: "benchmark".to_string(),
+                block_number: 18_500_000 + i,
                 timestamp: 1700000000 + i * 12,
+                metadata: HashMap::new(),
             };
             
             let _actions = strategy.process_event(event).await;
@@ -518,13 +524,16 @@ impl IntegrationTestRunner {
         strategy.initialize().await?;
         
         let event = AnalysisEvent {
-            block_number: 18_500_000,
+            event_type: EventType::MempoolTransaction,
+            contract_address: Address::from([2u8; 20]),
+            tx_data: Some(vec![0xa9, 0x05, 0x9c, 0xbb]),
+            transaction_data: Some(vec![0xa9, 0x05, 0x9c, 0xbb]),
             transaction_hash: [1u8; 32],
-            contract_address: [2u8; 20],
-            transaction_data: vec![0xa9, 0x05, 0x9c, 0xbb],
-            event_type: "integration_test".to_string(),
             event_data: vec![],
+            event_kind: "integration_test".to_string(),
+            block_number: 18_500_000,
             timestamp: 1700000000,
+            metadata: HashMap::new(),
         };
         
         let actions = strategy.process_event(event).await;

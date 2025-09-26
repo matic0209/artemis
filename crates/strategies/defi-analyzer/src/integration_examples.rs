@@ -116,13 +116,16 @@ impl IntegrationExample {
         // Simulate stream of events
         for i in 0..10 {
             let event = AnalysisEvent {
-                block_number: 18500000 + i,
+                event_type: EventType::BlockAnalysis,
+                contract_address: Address::from([i as u8; 20]),
+                tx_data: Some(vec![0xa9, 0x05, 0x9c, 0xbb]), // Mock swap data
+                transaction_data: Some(vec![0xa9, 0x05, 0x9c, 0xbb]),
                 transaction_hash: [i as u8; 32],
-                contract_address: [i as u8; 20],
-                transaction_data: vec![0xa9, 0x05, 0x9c, 0xbb], // Mock swap data
-                event_type: "block_analysis".to_string(),
                 event_data: vec![],
+                event_kind: "block_analysis".to_string(),
+                block_number: 18500000 + i,
                 timestamp: 1700000000 + i * 12,
+                metadata: HashMap::new(),
             };
             
             let actions = strategy.process_event(event).await;
