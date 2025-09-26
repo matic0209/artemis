@@ -823,7 +823,8 @@ impl ExecutionLayer {
         let path_explorer = PathExplorer::new(&z3_ctx, path_config);
         
         // Create ABI parser
-        let abi_parser = ABIParser::new();
+        let abi_config = ABIParserConfig::default();
+        let abi_parser = ABIParser::new(z3_ctx.clone(), abi_config);
         
         Ok(Self {
             tx_builder: TransactionBuilder { config: config.clone() },

@@ -1000,9 +1000,9 @@ pub async fn setup_complete_artemis_mev() -> Result<()> {
     };
     
     let mev_collector = CompleteMEVCollector {
-        block_collector: BlockCollector::new(/* params */),
-        log_collector: LogCollector::new(/* params */), 
-        mempool_collector: MempoolCollector::new(/* params */),
+        block_collector: BlockCollector::new(provider.clone()),
+        log_collector: LogCollector::new(provider.clone()), 
+        mempool_collector: MempoolCollector::new(provider.clone()),
         config: collector_config,
     };
     
@@ -1020,8 +1020,8 @@ pub async fn setup_complete_artemis_mev() -> Result<()> {
     };
     
     let mev_executor = CompleteMEVExecutor {
-        flashbots_executor: FlashbotsAlloyExecutor::new(/* params */),
-        mempool_executor: MempoolAlloyExecutor::new(/* params */),
+        flashbots_executor: FlashbotsAlloyExecutor::new(provider.clone(), signer.clone()),
+        mempool_executor: MempoolAlloyExecutor::new(provider.clone()),
         config: executor_config,
     };
     
