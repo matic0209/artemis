@@ -358,6 +358,7 @@ impl DeFiAnalyzerStrategy {
             crate::types::RiskLevel::Low => 20,
             crate::types::RiskLevel::Medium => 50,
             crate::types::RiskLevel::High => 80,
+            crate::types::RiskLevel::Critical => 100,
         };
 
         if risk_score > self.config.risk_tolerance {
@@ -380,6 +381,7 @@ impl DeFiAnalyzerStrategy {
             crate::types::RiskLevel::Low => 0,
             crate::types::RiskLevel::Medium => 20,
             crate::types::RiskLevel::High => 40,
+            crate::types::RiskLevel::Critical => 60,
         };
 
         (profit_score + success_score).saturating_sub(risk_penalty).min(100)

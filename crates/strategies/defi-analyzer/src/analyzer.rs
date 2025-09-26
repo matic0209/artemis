@@ -494,6 +494,7 @@ impl DeFiAnalyzer {
                     RiskLevel::Low => 20,
                     RiskLevel::Medium => 50,
                     RiskLevel::High => 80,
+                    RiskLevel::Critical => 100,
                 })
                 .sum::<u8>() / results.arbitrage_opportunities.len() as u8;
             
