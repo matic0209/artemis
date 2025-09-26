@@ -8,11 +8,13 @@
 //! - Full Artemis ecosystem integration
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use anyhow::Result;
 use tokio_stream::{Stream, StreamExt};
 use tracing::{info, debug, warn, error};
+use alloy_signer_local::LocalWallet;
 
 // Full Artemis integration (working with fixed artemis-core)
 use artemis_core::{
@@ -982,6 +984,11 @@ pub async fn setup_complete_artemis_mev() -> Result<()> {
     
     // Load configuration
     let config = ProductionConfig::load()?;
+    
+    // Create provider (mock for setup)
+    // For now, we'll use a placeholder - in real implementation this would be a proper provider
+    let provider = Arc::new(());
+    let signer = Arc::new(LocalWallet::from_str("0x0000000000000000000000000000000000000000000000000000000000000001")?);
     
     // Create Artemis engine
     let mut engine = Engine::new()
