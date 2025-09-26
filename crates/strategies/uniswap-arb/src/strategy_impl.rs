@@ -295,7 +295,7 @@ where
         
         // 评估风险
         let risk_assessment = self.risk_assessor.assess_risk(
-            v3_address,
+            v3_address_alloy,
             &predicted_prices,
         ).await?;
         
@@ -328,7 +328,7 @@ where
         
         // 生成 bundles
         let bundles = self.generate_optimized_bundles(
-            v3_address,
+            v3_address_alloy,
             event.hash,
             profitable_amounts,
         ).await?;
@@ -493,9 +493,11 @@ where
         
         for amount_info in amounts {
             // 使用底层 Alloy 实现生成 bundle
+            let v3_address_h160 = primitive_types::H160::from_slice(v3_address.as_slice());
+            let tx_hash_h256 = primitive_types::H256::from_slice(&tx_hash[..]);
             let bundle = self.alloy_impl.generate_single_bundle(
-                v3_address,
-                tx_hash,
+                v3_address_h160,
+                tx_hash_h256,
                 amount_info.amount,
             ).await?;
             
@@ -588,6 +590,12 @@ impl PricePredictor {
         Self {
             price_history: HashMap::new(),
             model: PriceModel::Adaptive,
+            model_params: PriceModelParams {
+                volatility_factor: 0.02,
+                trend_weight: 0.3,
+                momentum_weight: 0.2,
+                mean_reversion_weight: 0.1,
+            },
         }
     }
     
@@ -628,15 +636,14 @@ impl PricePredictor {
         let mean_reversion = self.calculate_mean_reversion(historical, window)?;
         
         // 组合预测
-        let v3_prediction = current_prices.v3_price * (U256::from(1) + 
-            (trend * self.model_params.trend_weight + 
+        let adjustment_factor = (trend * self.model_params.trend_weight + 
              momentum * self.model_params.momentum_weight + 
-             mean_reversion * self.model_params.mean_reversion_weight) / U256::from(100));
+             mean_reversion * self.model_params.mean_reversion_weight) / 100.0;
+        let v3_prediction = current_prices.v3_price * (U256::from(1) + 
+            U256::from((adjustment_factor * 100.0) as u64));
         
         let v2_prediction = current_prices.v2_price * (U256::from(1) + 
-            (trend * self.model_params.trend_weight + 
-             momentum * self.model_params.momentum_weight + 
-             mean_reversion * self.model_params.mean_reversion_weight) / U256::from(100));
+            U256::from((adjustment_factor * 100.0) as u64));
         
         // 计算置信度
         let confidence = self.calculate_confidence(historical, window)?;
@@ -645,6 +652,7 @@ impl PricePredictor {
             v3_price: v3_prediction,
             v2_price: v2_prediction,
             confidence,
+            prediction_horizon: Duration::from_secs(window),
         })
     }
 }
@@ -655,6 +663,12 @@ impl RiskAssessor {
         Self {
             risk_model: RiskModel::Adaptive,
             risk_history: HashMap::new(),
+            risk_params: RiskParams {
+                max_volatility: 0.05,
+                min_liquidity: U256::from(1000) * U256::from(10).pow(U256::from(18)),
+                max_slippage: 0.01,
+                correlation_threshold: 0.8,
+            },
         }
     }
     
@@ -729,6 +743,40 @@ impl RiskAssessor {
         // 简化的历史价格加载
         // 在实际实现中，这里应该从数据库或API加载历史数据
         Ok(HashMap::new())
+    }
+    
+    fn calculate_volatility(&self, _historical: &RiskMetrics) -> Result<f64> {
+        // 简化的波动率计算
+        Ok(0.04) // 默认4%的波动率
+    }
+}
+
+// PricePredictor 实现
+impl PricePredictor {
+    async fn load_historical_prices(&self) -> Result<HashMap<Address, VecDeque<PricePoint>>> {
+        // 简化的历史价格加载
+        // 在实际实现中，这里应该从数据库或API加载历史数据
+        Ok(HashMap::new())
+    }
+    
+    fn calculate_trend(&self, _historical: &VecDeque<PricePoint>, _window: u64) -> Result<f64> {
+        // 简化的趋势计算
+        Ok(0.05) // 默认5%的趋势
+    }
+    
+    fn calculate_momentum(&self, _historical: &VecDeque<PricePoint>, _window: u64) -> Result<f64> {
+        // 简化的动量计算
+        Ok(0.03) // 默认3%的动量
+    }
+    
+    fn calculate_mean_reversion(&self, _historical: &VecDeque<PricePoint>, _window: u64) -> Result<f64> {
+        // 简化的均值回归计算
+        Ok(0.02) // 默认2%的均值回归
+    }
+    
+    fn calculate_confidence(&self, _predicted_prices: &PredictedPrices) -> Result<f64> {
+        // 简化的置信度计算
+        Ok(0.75) // 默认75%的置信度
     }
 }
 

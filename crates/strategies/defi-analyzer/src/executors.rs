@@ -12,13 +12,13 @@ use crate::{
     error::DeFiResult,
 };
 
-// use artemis_core::{
-//     types::Executor,
-//     executors::{
-//         mempool_alloy_executor::MempoolAlloyExecutor,
-//         flashbots_alloy_executor::FlashbotsAlloyExecutor,
-//     },
-// };
+use artemis_core::{
+    types::Executor,
+    executors::{
+        mempool_alloy_executor::MempoolAlloyExecutor,
+        flashbots_alloy_executor::FlashbotsAlloyExecutor,
+    },
+};
 
 /// DeFi Mempool Executor
 /// Executes DeFi analysis actions through mempool
@@ -97,14 +97,14 @@ impl DeFiMempoolExecutor {
     }
     
     /// Convert AnalysisAction to mempool transaction
-    fn convert_action_to_transaction(&self, action: &AnalysisAction) -> DeFiResult<alloy_primitives::Transaction> {
+    fn convert_action_to_transaction(&self, action: &AnalysisAction) -> DeFiResult<alloy_rpc_types_eth::Transaction> {
         use alloy_primitives::{Address, U256, Bytes};
         
         // Create transaction from action
-        let tx = alloy_primitives::Transaction {
+        let tx = alloy_rpc_types_eth::Transaction {
             to: Some(Address::from_slice(&action.target_address)),
             value: U256::from(action.value),
-            gas_limit: action.gas_limit,
+            gas: action.gas_limit,
             gas_price: Some(U256::from(action.gas_price)),
             input: Bytes::from(action.calldata.clone()),
             nonce: action.nonce,
