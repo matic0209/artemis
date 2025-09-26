@@ -104,6 +104,14 @@ pub enum ActionType {
     DocumentationComparison,
     /// Generate report
     GenerateReport,
+    /// Arbitrage execution
+    ArbitrageExecution,
+    /// Liquidity provision
+    LiquidityProvision,
+    /// Risk management
+    RiskManagement,
+    /// Monitoring
+    Monitoring,
 }
 
 /// Analysis parameters

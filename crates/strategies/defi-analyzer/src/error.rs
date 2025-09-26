@@ -44,6 +44,34 @@ pub enum DeFiAnalyzerError {
     /// Analysis depth exceeded
     #[error("Analysis depth {depth} exceeded maximum {max_depth}")]
     AnalysisDepthExceeded { depth: u32, max_depth: u32 },
+
+    /// Invalid input
+    #[error("Invalid input: {reason}")]
+    InvalidInput { reason: String },
+
+    /// Computation error
+    #[error("Computation error: {reason}")]
+    ComputationError { reason: String },
+
+    /// ABI fetch error
+    #[error("ABI fetch error: {reason}")]
+    ABIFetchError { reason: String },
+
+    /// Circuit breaker open
+    #[error("Circuit breaker open: {reason}")]
+    CircuitBreakerOpen { reason: String },
+
+    /// Execution error
+    #[error("Execution error: {reason}")]
+    ExecutionError { reason: String },
+
+    /// Z3 error
+    #[error("Z3 error: {reason}")]
+    Z3Error { reason: String },
+
+    /// Contract call error
+    #[error("Contract call error: {reason}")]
+    ContractCallError { reason: String },
 }
 
 /// Result type for DeFi Analyzer operations
@@ -113,6 +141,13 @@ impl DeFiAnalyzerError {
             DeFiAnalyzerError::NetworkError { .. } => true,
             DeFiAnalyzerError::InsufficientResources { .. } => true,
             DeFiAnalyzerError::AnalysisDepthExceeded { .. } => true,
+            DeFiAnalyzerError::InvalidInput { .. } => false,
+            DeFiAnalyzerError::ComputationError { .. } => true,
+            DeFiAnalyzerError::ABIFetchError { .. } => true,
+            DeFiAnalyzerError::CircuitBreakerOpen { .. } => true,
+            DeFiAnalyzerError::ExecutionError { .. } => true,
+            DeFiAnalyzerError::Z3Error { .. } => true,
+            DeFiAnalyzerError::ContractCallError { .. } => true,
             DeFiAnalyzerError::ConfigurationError { .. } => false,
         }
     }
