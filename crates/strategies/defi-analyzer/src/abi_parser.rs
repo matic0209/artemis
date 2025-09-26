@@ -416,7 +416,8 @@ impl ABIParser {
         ]
         "#;
         
-        let abi_elements: Vec<ABIElement> = serde_json::from_str(abi_json)?;
+        let abi_elements: Vec<ABIElement> = serde_json::from_str(abi_json)
+            .map_err(|e| DeFiAnalyzerError::ABIFetchError(e.to_string()))?;
         Ok(abi_elements)
     }
     
@@ -438,7 +439,8 @@ impl ABIParser {
         ]
         "#;
         
-        let abi_elements: Vec<ABIElement> = serde_json::from_str(abi_json)?;
+        let abi_elements: Vec<ABIElement> = serde_json::from_str(abi_json)
+            .map_err(|e| DeFiAnalyzerError::ABIFetchError(e.to_string()))?;
         Ok(abi_elements)
     }
     
@@ -462,7 +464,8 @@ impl ABIParser {
         ]
         "#;
         
-        let abi_elements: Vec<ABIElement> = serde_json::from_str(abi_json)?;
+        let abi_elements: Vec<ABIElement> = serde_json::from_str(abi_json)
+            .map_err(|e| DeFiAnalyzerError::ABIFetchError(e.to_string()))?;
         Ok(abi_elements)
     }
     
@@ -482,7 +485,8 @@ impl ABIParser {
         ]
         "#;
         
-        let abi_elements: Vec<ABIElement> = serde_json::from_str(abi_json)?;
+        let abi_elements: Vec<ABIElement> = serde_json::from_str(abi_json)
+            .map_err(|e| DeFiAnalyzerError::ABIFetchError(e.to_string()))?;
         Ok(abi_elements)
     }
 }
