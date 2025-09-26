@@ -245,13 +245,14 @@ impl DeFiAnalyzerStrategy {
         let mut actions = Vec::new();
         
         // Parse transaction data to extract DeFi actions
-        if event.transaction_data.len() >= 4 {
-            let selector = [
-                event.transaction_data[0],
-                event.transaction_data[1], 
-                event.transaction_data[2],
-                event.transaction_data[3]
-            ];
+        if let Some(tx_data) = &event.transaction_data {
+            if tx_data.len() >= 4 {
+                let selector = [
+                    tx_data[0],
+                    tx_data[1], 
+                    tx_data[2],
+                    tx_data[3]
+                ];
             
             // Common DeFi function selectors
             let defi_action = match selector {
@@ -288,8 +289,9 @@ impl DeFiAnalyzerStrategy {
                 _ => None,
             };
             
-            if let Some(action) = defi_action {
-                actions.push(action);
+                if let Some(action) = defi_action {
+                    actions.push(action);
+                }
             }
         }
         

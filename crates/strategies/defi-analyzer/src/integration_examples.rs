@@ -12,6 +12,7 @@ use crate::{
     DeFiAnalyzerStrategy,
     AnalyzerConfig,
     AnalysisEvent,
+    EventType,
     NegativeCycleArbitrageEngine,
     NegativeCycleConfig,
     StateSnapshot,

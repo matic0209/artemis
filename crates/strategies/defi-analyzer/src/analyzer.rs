@@ -110,16 +110,16 @@ impl DeFiAnalyzer {
         info!("Analyzing mempool transaction for contract: {}", event.contract_address);
         
         let analysis_id = format!("mempool_{}", event.block_number);
-        let start_time = self.metrics.record_analysis_start(&analysis_id);
+        let start_time = std::time::Instant::now();
         
         // Check cache first
         if let Some(cached_result) = self.analysis_cache.get(&analysis_id) {
             debug!("Using cached analysis result");
-            self.metrics.record_cache_hit();
+            self.stats.cache_hits += 1;
             return Ok(cached_result.clone());
         }
         
-        self.metrics.record_cache_miss();
+        self.stats.cache_misses += 1;
         
         // Perform analysis
         let result = self.perform_analysis(event, &analysis_id).await?;
