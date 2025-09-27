@@ -3,7 +3,6 @@
 //! This module provides a comprehensive error handling framework that replaces
 //! all unwrap() and expect() calls with proper error propagation.
 
-use anyhow::Context;
 use thiserror::Error;
 
 /// Main error type for Artemis operations

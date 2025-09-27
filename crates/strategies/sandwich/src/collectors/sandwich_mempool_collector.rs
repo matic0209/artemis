@@ -8,7 +8,7 @@ use tokio_stream::StreamExt;
 use tracing::{debug, info};
 
 use artemis_core::{
-    eth::{Transaction, Provider, Address, U256},
+    eth::{Transaction, Address, U256},
     types::{Collector, CollectorStream},
 };
 use alloy_provider::Provider as ProviderTrait;
@@ -16,8 +16,8 @@ use alloy_consensus::transaction::Transaction as TransactionTrait;
 
 /// 专门用于 Sandwich 策略的内存池收集器
 /// 只收集可能可以被 sandwich 的交易
-pub struct SandwichMempoolCollector {
-    provider: Arc<Provider>,
+pub struct SandwichMempoolCollector<P> {
+    provider: Arc<P>,
     /// 监控的 DEX 路由器地址
     target_routers: HashSet<Address>,
     /// 监控的代币地址
@@ -28,8 +28,11 @@ pub struct SandwichMempoolCollector {
     buffer_size: usize,
 }
 
-impl SandwichMempoolCollector {
-    pub fn new(provider: Arc<Provider>) -> Self {
+impl<P> SandwichMempoolCollector<P>
+where
+    P: ProviderTrait + Clone + 'static,
+{
+    pub fn new(provider: Arc<P>) -> Self {
         // 预设的 DEX 路由器地址
         let mut target_routers = HashSet::new();
         
@@ -163,7 +166,10 @@ impl SandwichMempoolCollector {
 }
 
 #[async_trait]
-impl Collector<Transaction> for SandwichMempoolCollector {
+impl<P> Collector<Transaction> for SandwichMempoolCollector<P>
+where
+    P: ProviderTrait + Clone + 'static,
+{
     async fn get_event_stream(&self) -> Result<CollectorStream<'_, Transaction>> {
         let (tx, rx) = mpsc::channel::<Transaction>(self.buffer_size);
         let provider = self.provider.clone();

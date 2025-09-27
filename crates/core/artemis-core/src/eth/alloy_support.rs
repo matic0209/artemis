@@ -71,11 +71,14 @@ pub mod helpers {
     }
 
     /// Get multiple balances concurrently for better performance
-    pub async fn get_balances_batch(
-        provider: &Provider,
+    pub async fn get_balances_batch<P>(
+        provider: &P,
         addresses: &[Address],
-        block: Option<BlockNumberOrTag>,
-    ) -> Result<Vec<U256>> {
+        _block: Option<BlockNumberOrTag>,
+    ) -> Result<Vec<U256>>
+    where
+        P: ProviderTrait,
+    {
         use futures::future::try_join_all;
         
         let balance_futures: Vec<_> = addresses.iter()

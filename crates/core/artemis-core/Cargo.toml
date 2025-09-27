@@ -51,9 +51,11 @@ alloy-signer = { version = "1.0.27" }
 alloy-network = { version = "1.0.27" }
 # rbuilder integration (optional) - JSON-RPC client only, no direct dependency
 uuid = { version = "1.6", optional = true }
+num_cpus = "1.16"
+chrono = "0.4"
 
 [features]
-default = []
+default = ["dep:uuid"]
 rbuilder-integration = ["dep:uuid"]
 
 # Optional Alloy deps for future migration. Not used unless `sdk-alloy` is enabled.

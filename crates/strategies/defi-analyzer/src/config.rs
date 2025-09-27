@@ -1,4 +1,9 @@
 //! DeFi Analyzer Configuration
+//!
+//! This module defines all configuration options for the DeFi analyzer,
+//! including analysis parameters, performance settings, security thresholds,
+//! and feature toggles. Configuration is designed to be flexible and
+//! production-ready.
 
 use alloy_primitives::U256;
 use anyhow::Result;
@@ -25,6 +30,14 @@ pub struct AnalyzerConfig {
     pub enable_realtime_monitoring: bool,
     /// Monitoring interval in seconds
     pub monitoring_interval_seconds: u64,
+    /// Maximum number of execution paths to explore per analysis
+    pub max_execution_paths: u32,
+    /// Maximum call depth during execution analysis
+    pub max_depth: u32,
+    /// Enable arbitrage detection heuristics
+    pub enable_arbitrage_detection: bool,
+    /// Enable consistency checking between protocol states
+    pub enable_consistency_checking: bool,
     /// Contract addresses to monitor
     pub monitored_contracts: Vec<String>,
     /// ABI cache settings
@@ -69,6 +82,10 @@ impl Default for AnalyzerConfig {
             risk_tolerance: 50,
             enable_realtime_monitoring: true,
             monitoring_interval_seconds: 60,
+            max_execution_paths: 500,
+            max_depth: 16,
+            enable_arbitrage_detection: true,
+            enable_consistency_checking: true,
             monitored_contracts: Vec::new(),
             abi_cache_settings: AbiCacheSettings::default(),
             performance_settings: PerformanceSettings::default(),

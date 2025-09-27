@@ -126,6 +126,13 @@ impl DeFiAnalyzerError {
             DeFiAnalyzerError::AnalysisDepthExceeded { .. } => {
                 RecoveryStrategy::ReduceAnalysisDepth
             },
+            DeFiAnalyzerError::InvalidInput(_) => RecoveryStrategy::SkipAnalysis,
+            DeFiAnalyzerError::ComputationError(_) => RecoveryStrategy::UseSimplifiedAnalysis,
+            DeFiAnalyzerError::ABIFetchError(_) => RecoveryStrategy::UseCachedResult,
+            DeFiAnalyzerError::CircuitBreakerOpen(_) => RecoveryStrategy::SkipAnalysis,
+            DeFiAnalyzerError::ExecutionError(_) => RecoveryStrategy::RetryWithBackoff { max_retries: 2, base_delay_ms: 250 },
+            DeFiAnalyzerError::Z3Error(_) => RecoveryStrategy::UseSimplifiedAnalysis,
+            DeFiAnalyzerError::ContractCallError(_) => RecoveryStrategy::RetryWithBackoff { max_retries: 3, base_delay_ms: 300 },
         }
     }
 

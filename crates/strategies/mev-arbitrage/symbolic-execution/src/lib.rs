@@ -3,15 +3,13 @@
 //! This module provides the complete EVM interpreter functionality for symbolic execution,
 //! maintaining full compatibility with DeFiAligner's SEVM implementation.
 
-use alloy_primitives::{Address, U256};
+use alloy_primitives::Address;
 use anyhow::Result;
-use tracing::{info, debug, warn, error};
+use tracing::{info, warn, error};
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
 use std::fmt;
-use z3::{Context, Config, Solver, ast::{BV, Bool, Ast}};
+use z3::{Context, Config, Solver, ast::{BV, Ast}};
 use std::sync::Arc;
-use core::str::FromStr;
 
 // 定义本地类型和错误
 use serde::{Deserialize, Serialize};

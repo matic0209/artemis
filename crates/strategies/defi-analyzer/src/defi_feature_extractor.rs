@@ -385,8 +385,7 @@ impl<'ctx> DeFiFeatureExtractor<'ctx> {
                     opportunity_type: ArbitrageType::CrossProtocolArbitrage,
                     profit_potential,
                     risk_level: RiskLevel::Medium,
-                    confidence: 0.7,
-                    description: "Cross-protocol arbitrage opportunity detected".to_string(),
+                    required_conditions: vec![],
                     execution_path: path.clone(),
                 });
             }
@@ -413,8 +412,7 @@ impl<'ctx> DeFiFeatureExtractor<'ctx> {
                     opportunity_type: ArbitrageType::PriceArbitrage,
                     profit_potential,
                     risk_level: RiskLevel::High,
-                    confidence: 0.8,
-                    description: "Price arbitrage opportunity detected".to_string(),
+                    required_conditions: vec![],
                     execution_path: path.clone(),
                 });
             }

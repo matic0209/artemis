@@ -30,12 +30,6 @@ pub struct MEVArbitrageEngine {
 
 /// Symbolic Strategy Discoverer - Uses symbolic execution for strategy discovery
 pub struct SymbolicStrategyDiscoverer {
-    /// Z3 context for symbolic execution
-    ctx: z3::Context,
-    /// Symbolic EVM interpreter
-    symbolic_evm: SymbolicEVMInterpreter<'static>,
-    /// Path explorer for behavior analysis
-    path_explorer: PathExplorer<'static>,
     /// Configuration
     config: SymbolicDiscoveryConfig,
 }
@@ -350,17 +344,7 @@ impl MEVArbitrageEngine {
 impl SymbolicStrategyDiscoverer {
     /// Create new symbolic strategy discoverer
     pub fn new(config: SymbolicDiscoveryConfig) -> DeFiResult<Self> {
-        let z3_config = z3::Config::new();
-        let ctx = z3::Context::new(&z3_config);
-        let symbolic_evm = SymbolicEVMInterpreter::new(&ctx);
-        let path_explorer = PathExplorer::new(&ctx, PathExplorerConfig::default());
-        
-        Ok(Self {
-            ctx,
-            symbolic_evm,
-            path_explorer,
-            config,
-        })
+        Ok(Self { config })
     }
     
     /// Analyze contract behavior using symbolic execution
@@ -368,7 +352,31 @@ impl SymbolicStrategyDiscoverer {
         info!("🔍 Symbolic analysis of contract: {}", contract.address);
         
         // 1. Use path explorer to find all execution paths
-        let execution_paths = self.path_explorer.explore_paths(&contract.bytecode, &contract.address).await?;
+        use crate::types::{AnalysisEvent, EventType};
+        use std::collections::HashMap;
+
+        let z3_config = z3::Config::new();
+        let ctx = z3::Context::new(&z3_config);
+        let mut interpreter = SymbolicEVMInterpreter::new(&ctx);
+        let mut explorer = PathExplorer::new(&ctx, PathExplorerConfig::default());
+
+        let mut metadata = HashMap::new();
+        metadata.insert("source".to_string(), "symbolic_analysis".to_string());
+
+        let analysis_event = AnalysisEvent {
+            event_type: EventType::ContractDeployment,
+            contract_address: contract.address,
+            tx_data: Some(contract.bytecode.clone()),
+            transaction_data: None,
+            transaction_hash: [0u8; 32],
+            event_data: contract.bytecode.clone(),
+            event_kind: "symbolic_analysis".to_string(),
+            block_number: 0,
+            timestamp: 0,
+            metadata,
+        };
+
+        let execution_paths = explorer.explore_paths(&mut interpreter, &analysis_event)?;
         info!("Found {} execution paths for analysis", execution_paths.len());
         
         // 2. Analyze each path to extract behavior patterns
@@ -437,18 +445,20 @@ impl SymbolicStrategyDiscoverer {
     pub async fn optimize_strategy_z3(&self, opportunity: &ArbitrageOpportunity) -> DeFiResult<Option<StrategyCandidate>> {
         info!("⚡ Optimizing strategy with Z3 constraint solver");
         
-        let solver = z3::Solver::new(&self.ctx);
+        let z3_config = z3::Config::new();
+        let ctx = z3::Context::new(&z3_config);
+        let solver = z3::Solver::new(&ctx);
         
         // Define decision variables
-        let investment = z3::ast::BV::new_const(&self.ctx, "investment", 256);
-        let slippage = z3::ast::BV::new_const(&self.ctx, "slippage", 256);
+        let investment = z3::ast::BV::new_const(&ctx, "investment", 256);
+        let slippage = z3::ast::BV::new_const(&ctx, "slippage", 256);
         
         // Add constraints based on opportunity
-        self.add_opportunity_constraints(&solver, opportunity, &investment, &slippage)?;
+        self.add_opportunity_constraints(&ctx, &solver, opportunity, &investment, &slippage)?;
         
         // Maximize profit objective
-        let profit_function = self.encode_profit_function(opportunity, &investment, &slippage)?;
-        let min_profit = z3::ast::BV::from_u64(&self.ctx, self.config.min_profit_threshold.as_limbs()[0], 256);
+        let profit_function = self.encode_profit_function(&ctx, opportunity, &investment, &slippage)?;
+        let min_profit = z3::ast::BV::from_u64(&ctx, self.config.min_profit_threshold.as_limbs()[0], 256);
         solver.assert(&profit_function.bvuge(&min_profit));
         
         // Solve
@@ -544,22 +554,22 @@ impl SymbolicStrategyDiscoverer {
         Ok(None)
     }
     
-    fn add_opportunity_constraints(&self, solver: &z3::Solver, _opportunity: &ArbitrageOpportunity, investment: &z3::ast::BV, slippage: &z3::ast::BV) -> DeFiResult<()> {
+    fn add_opportunity_constraints(&self, ctx: &z3::Context, solver: &z3::Solver, _opportunity: &ArbitrageOpportunity, investment: &z3::ast::BV, slippage: &z3::ast::BV) -> DeFiResult<()> {
         // Investment constraints
-        solver.assert(&investment.bvuge(&z3::ast::BV::from_u64(&self.ctx, 1_000_000_000_000_000u64, 256)));
-        solver.assert(&investment.bvule(&z3::ast::BV::from_u64(&self.ctx, 10_000_000_000_000_000_000u64, 256)));
-        
+        solver.assert(&investment.bvuge(&z3::ast::BV::from_u64(ctx, 1_000_000_000_000_000u64, 256)));
+        solver.assert(&investment.bvule(&z3::ast::BV::from_u64(ctx, 10_000_000_000_000_000_000u64, 256)));
+
         // Slippage constraints
-        solver.assert(&slippage.bvuge(&z3::ast::BV::from_u64(&self.ctx, 10, 256))); // 0.1%
-        solver.assert(&slippage.bvule(&z3::ast::BV::from_u64(&self.ctx, 100, 256))); // 1%
-        
+        solver.assert(&slippage.bvuge(&z3::ast::BV::from_u64(ctx, 10, 256))); // 0.1%
+        solver.assert(&slippage.bvule(&z3::ast::BV::from_u64(ctx, 100, 256))); // 1%
+
         Ok(())
     }
-    
-    fn encode_profit_function(&self, _opportunity: &ArbitrageOpportunity, investment: &z3::ast::BV, _slippage: &z3::ast::BV) -> DeFiResult<z3::ast::BV> {
+
+    fn encode_profit_function<'ctx>(&self, ctx: &'ctx z3::Context, _opportunity: &ArbitrageOpportunity, investment: &z3::ast::BV<'ctx>, _slippage: &z3::ast::BV<'ctx>) -> DeFiResult<z3::ast::BV<'ctx>> {
         // Simplified profit function: profit = investment * 1.01 (1% profit)
-        let profit_rate = z3::ast::BV::from_u64(&self.ctx, 101, 256);
-        let hundred = z3::ast::BV::from_u64(&self.ctx, 100, 256);
+        let profit_rate = z3::ast::BV::from_u64(ctx, 101, 256);
+        let hundred = z3::ast::BV::from_u64(ctx, 100, 256);
         Ok(investment.bvmul(&profit_rate).bvudiv(&hundred))
     }
     
@@ -568,7 +578,7 @@ impl SymbolicStrategyDiscoverer {
             path: opportunity.execution_path.clone(),
             revenue: opportunity.profit_potential,
             strategy_type: crate::jit_strategy_discovery::StrategyType::SMT,
-            risk_level: opportunity.risk_level,
+            risk_level: opportunity.risk_level.clone(),
             gas_cost: U256::from(300_000) * U256::from(20_000_000_000u64),
             net_profit: opportunity.profit_potential.saturating_sub(U256::from(300_000) * U256::from(20_000_000_000u64)),
             transactions: vec![],

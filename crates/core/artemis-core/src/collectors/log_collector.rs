@@ -3,7 +3,6 @@ use crate::eth::Filter;
 use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
-use tokio_stream::StreamExt;
 
 /// A collector that listens for new blockchain event logs based on a [Filter](Filter),
 /// and generates a stream of [events](alloy_rpc_types_eth::Log).

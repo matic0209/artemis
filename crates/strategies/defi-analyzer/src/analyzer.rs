@@ -47,6 +47,10 @@ pub struct AnalysisStats {
     pub total_inconsistencies: u64,
     /// Events processed
     pub events_processed: u64,
+    /// Cache hits
+    pub cache_hits: u64,
+    /// Cache misses
+    pub cache_misses: u64,
     /// Actions generated
     pub actions_generated: u64,
     /// Success rate

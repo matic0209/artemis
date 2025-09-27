@@ -6,7 +6,7 @@ use tracing::{debug, info, warn, error};
 use rayon::prelude::*;
 
 use artemis_core::{
-    eth::{Address, Provider, U256},
+    eth::{Address, U256},
     types::Strategy,
     state_manager::StateManager,
 };
@@ -15,16 +15,19 @@ use alloy_provider::Provider as ProviderTrait;
 use alloy_consensus::transaction::Transaction as TransactionTrait;
 
 use crate::types::{
-    Event, Action, SandwichConfig, SandwichOpportunity, SandwichBundle, 
+    Event, Action, SandwichConfig, SandwichOpportunity, SandwichBundle,
     BlockInfo, TokenInventory, SandwichStats, PoolState,
 };
 use crate::simulator::SandwichSimulator;
 
 /// 查询 Uniswap V2 池子的储备量
-async fn query_v2_reserves(
-    provider: Arc<Provider>,
+async fn query_v2_reserves<P>(
+    provider: Arc<P>,
     pool_address: Address,
-) -> Result<(U256, U256, u32)> {
+) -> Result<(U256, U256, u32)>
+where
+    P: ProviderTrait,
+{
     use alloy_rpc_types_eth::TransactionRequest;
     use alloy_primitives::{Bytes, TxKind};
     
@@ -55,9 +58,9 @@ async fn query_v2_reserves(
 }
 
 /// 高性能 Sandwich 攻击策略
-pub struct SandwichStrategy {
+pub struct SandwichStrategy<P> {
     /// Alloy provider
-    provider: Arc<Provider>,
+    provider: Arc<P>,
     /// 策略配置
     config: SandwichConfig,
     /// 池子管理器
@@ -65,7 +68,7 @@ pub struct SandwichStrategy {
     /// 代币库存管理
     inventory: TokenInventory,
     /// 状态管理器（缓存优化）
-    state_manager: Arc<StateManager>,
+    state_manager: Arc<StateManager<P>>,
     /// Sandwich 模拟器
     simulator: SandwichSimulator,
     /// Bundle 构建器
@@ -127,11 +130,14 @@ impl PoolManager {
     }
 }
 
-impl SandwichStrategy {
+impl<P> SandwichStrategy<P>
+where
+    P: ProviderTrait + Clone + 'static,
+{
     pub fn new(
-        provider: Arc<Provider>,
+        provider: Arc<P>,
         config: SandwichConfig,
-        state_manager: Arc<StateManager>,
+        state_manager: Arc<StateManager<P>>,
     ) -> Self {
         Self {
             simulator: SandwichSimulator::new(Arc::clone(&provider), config.clone()),
@@ -461,7 +467,10 @@ impl PoolManager {
 }
 
 #[async_trait]
-impl Strategy<Event, Action> for SandwichStrategy {
+impl<P> Strategy<Event, Action> for SandwichStrategy<P>
+where
+    P: ProviderTrait + Clone + 'static,
+{
     async fn sync_state(&mut self) -> Result<()> {
         info!("🔄 同步 Sandwich 策略状态...");
         
@@ -507,7 +516,10 @@ impl Strategy<Event, Action> for SandwichStrategy {
     }
 }
 
-impl SandwichStrategy {
+impl<P> SandwichStrategy<P>
+where
+    P: ProviderTrait + Clone + 'static,
+{
     /// 处理新区块
     async fn process_new_block(&mut self, block: artemis_core::collectors::block_collector::NewBlock) {
         debug!("📦 新区块: {}", block.number);

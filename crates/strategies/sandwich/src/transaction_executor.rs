@@ -1,6 +1,7 @@
 //! 交易执行器 - 处理三阶段 Sandwich 交易执行
 
 use std::sync::Arc;
+use alloy_rpc_types_eth::TransactionTrait;
 use anyhow::{anyhow, Result, Context};
 use tracing::{debug, info, warn, error};
 use tokio::sync::Mutex;
@@ -224,7 +225,7 @@ impl TransactionExecutor {
     
     /// 获取最终 WETH 余额
     async fn get_final_weth_balance(&self, searcher_address: Address) -> Result<U256> {
-        let engine = self.engine.lock().await;
+        let mut engine = self.engine.lock().await;
         let weth_address: Address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".parse().unwrap();
         
         // 计算 WETH 余额存储槽
@@ -309,20 +310,21 @@ impl TransactionBuilder {
     pub fn build_victim_tx_env(&self, victim_tx: &Transaction) -> Result<TxEnv> {
         // 从受害者交易中提取信息
         let caller = victim_tx.inner.signer();
-        let to = victim_tx.inner.inner().to().unwrap_or_default();
-        let value = victim_tx.inner.inner().value().unwrap_or_default();
-        let gas_limit = victim_tx.inner.inner().gas_limit().unwrap_or(100_000);
-        let gas_price = victim_tx.inner.inner().max_fee_per_gas().unwrap_or_default();
-        let data = victim_tx.inner.inner().input().cloned().unwrap_or_default();
+        let inner = victim_tx.inner.inner();
+        let to = inner.to().unwrap_or_default();
+        let value = inner.value();
+        let gas_limit = inner.gas_limit();
+        let gas_price = inner.max_fee_per_gas();
+        let data = inner.input().clone();
         
         Ok(TxEnv {
             tx_type: 2, // EIP-1559 transaction
             caller: RevmAddress::from_slice(caller.as_slice()),
             gas_limit,
-            gas_price: gas_price.to::<u128>(),
+            gas_price,
             kind: TransactTo::Call(RevmAddress::from_slice(to.as_slice())),
             value: RevmU256::from(value),
-            data: Bytes::from(data.0),
+            data: Bytes::from(data.as_ref().to_vec()),
             nonce: 1, // 简化实现
             chain_id: Some(1),
             access_list: Default::default(),
@@ -403,11 +405,14 @@ impl TransactionBuilder {
     
     /// 获取受害者交易的最高 Gas 价格
     fn get_max_victim_gas_price(&self, opportunity: &SandwichOpportunity) -> U256 {
-        opportunity.victim_txs
+        let max_price = opportunity
+            .victim_txs
             .iter()
-            .filter_map(|tx| tx.gas_price())
+            .map(|tx| tx.inner.inner().priority_fee_or_price())
             .max()
-            .unwrap_or(U256::from(20000000000u64)) // 默认 20 gwei
+            .unwrap_or(20_000_000_000u128);
+
+        U256::from(max_price)
     }
 }
 

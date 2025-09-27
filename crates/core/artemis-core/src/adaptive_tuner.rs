@@ -1,3 +1,10 @@
+//! Adaptive Performance Tuning System
+//!
+//! This module provides automatic performance tuning capabilities that monitor
+//! system metrics and dynamically adjust parameters to optimize performance.
+//! It tracks latency, throughput, error rates, and other metrics to make
+//! intelligent tuning decisions.
+
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -15,13 +22,17 @@ pub struct AdaptiveTuner {
 }
 
 #[derive(Debug, Clone)]
-struct PerformanceSnapshot {
+pub struct PerformanceSnapshot {
+    #[allow(dead_code)]
     timestamp: Instant,
+    #[allow(dead_code)]
     latency_p50: f64,
     latency_p95: f64,
     throughput: f64,
     error_rate: f64,
+    #[allow(dead_code)]
     memory_usage: f64,
+    #[allow(dead_code)]
     cache_hit_rate: f64,
 }
 

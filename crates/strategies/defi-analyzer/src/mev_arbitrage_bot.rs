@@ -13,14 +13,14 @@ use anyhow::Result;
 
 use crate::{
     jit_strategy_discovery::{JITStrategyDiscoveryEngine, JITConfig, StrategyCandidate, DeFiAction},
-    types::{AnalysisEvent, AnalysisAction},
+    types::{AnalysisEvent, AnalysisAction, EventType},
     error::{DeFiResult, DeFiAnalyzerError},
     production_config::ProductionConfig,
     production_monitoring::{ProductionMetrics, MetricsConfig},
     production_security::ProductionSecurity,
-    evm_interpreter::{SymbolicEVMInterpreter, ExecutionPath, EVMExecutionState, SEVM},
+    evm_interpreter::{SymbolicEVMInterpreter, ExecutionPath, EVMExecutionState},
     path_explorer::{PathExplorer, PathExplorerConfig},
-    abi_parser::ABIParser,
+    abi_parser::{ABIParser, ABIParserConfig},
 };
 
 /// Complete MEV Arbitrage Bot
@@ -63,10 +63,6 @@ pub struct ExecutionLayer {
     gas_optimizer: GasOptimizer,
     /// Execution manager
     execution_manager: ExecutionManager,
-    /// Symbolic EVM interpreter for execution simulation
-    symbolic_evm: SymbolicEVMInterpreter<'static>,
-    /// Path explorer for execution path analysis
-    path_explorer: PathExplorer<'static>,
     /// ABI parser for contract interaction
     abi_parser: ABIParser,
     /// Configuration
@@ -442,6 +438,7 @@ impl MEVArbitrageBot {
             crate::types::RiskLevel::Low => 100,
             crate::types::RiskLevel::Medium => 70,
             crate::types::RiskLevel::High => 30,
+            crate::types::RiskLevel::Critical => 10,
         };
         
         profit_factor * type_factor * risk_factor / 100
@@ -816,22 +813,16 @@ impl ExecutionLayer {
         let z3_ctx = z3::Context::new(&z3_config);
         
         // Create symbolic EVM interpreter
-        let symbolic_evm = SymbolicEVMInterpreter::new(&z3_ctx);
-        
-        // Create path explorer for execution analysis
-        let path_config = PathExplorerConfig::default();
-        let path_explorer = PathExplorer::new(&z3_ctx, path_config);
-        
         // Create ABI parser
         let abi_config = ABIParserConfig::default();
+        let z3_config = z3::Config::new();
+        let z3_ctx = z3::Context::new(&z3_config);
         let abi_parser = ABIParser::new(z3_ctx.clone(), abi_config);
         
         Ok(Self {
             tx_builder: TransactionBuilder { config: config.clone() },
             gas_optimizer: GasOptimizer { config: config.clone() },
             execution_manager: ExecutionManager { config: config.clone() },
-            symbolic_evm,
-            path_explorer,
             abi_parser,
             config,
         })
@@ -842,7 +833,12 @@ impl ExecutionLayer {
         info!("🔍 Simulating arbitrage execution using symbolic EVM");
         
         let mut execution_paths = Vec::new();
-        
+
+        let z3_config = z3::Config::new();
+        let z3_ctx = z3::Context::new(&z3_config);
+        let mut interpreter = SymbolicEVMInterpreter::new(&z3_ctx);
+        let mut path_explorer = PathExplorer::new(&z3_ctx, PathExplorerConfig::default());
+
         // Build execution path for each step in arbitrage strategy
         for (i, step) in strategy.path.windows(2).enumerate() {
             let from_token = &step[0];
@@ -855,8 +851,27 @@ impl ExecutionLayer {
             
             // Use path explorer to analyze execution paths
             let contract_address = Address::from_slice(&rand::random::<[u8; 20]>()); // Mock contract address
-            let paths = self.path_explorer.explore_paths(&swap_bytecode, &contract_address).await?;
-            
+            use crate::types::{AnalysisEvent, EventType};
+            use std::collections::HashMap;
+
+            let mut metadata = HashMap::new();
+            metadata.insert("source".to_string(), "mev_execution_simulation".to_string());
+
+            let analysis_event = AnalysisEvent {
+                event_type: EventType::ContractDeployment,
+                contract_address,
+                tx_data: Some(swap_bytecode.clone()),
+                transaction_data: Some(swap_bytecode.clone()),
+                transaction_hash: [0u8; 32],
+                event_data: swap_bytecode.clone(),
+                event_kind: "mev_simulation".to_string(),
+                block_number: 0,
+                timestamp: 0,
+                metadata,
+            };
+
+            let paths = path_explorer.explore_paths(&mut interpreter, &analysis_event)?;
+
             info!("Found {} execution paths for {} -> {}", paths.len(), from_token, to_token);
             execution_paths.extend(paths);
         }
@@ -966,7 +981,7 @@ impl ExecutionLayer {
         };
         
         // Add complexity based on stack size and memory usage
-        let complexity_gas = state.stack.len() as u64 * 2 + state.memory.len() as u64;
+        let complexity_gas = state.current_stack.len() as u64 * 2 + state.current_memory.len() as u64;
         
         base_gas + complexity_gas
     }
@@ -976,7 +991,7 @@ impl ExecutionLayer {
         // Check for conditions that might cause revert
         
         // Stack underflow
-        if state.stack.is_empty() && matches!(state.current_opcode, 
+        if state.current_stack.is_empty() && matches!(state.current_opcode, 
             crate::evm_interpreter::OpCode::ADD | 
             crate::evm_interpreter::OpCode::SUB |
             crate::evm_interpreter::OpCode::MUL) {

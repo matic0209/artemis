@@ -1,14 +1,20 @@
+//! Performance Benchmark Suite
+//!
+//! This module provides comprehensive performance benchmarking capabilities
+//! for Artemis engine optimizations, including latency, throughput, and
+//! memory usage comparisons between different engine versions.
+
 use std::time::{Duration, Instant};
 use std::sync::Arc;
 use anyhow::Result;
 use tokio::sync::mpsc;
 
-use crate::eth::Provider;
+use alloy_provider::Provider as AlloyProvider;
 use crate::engine::Engine;
 
 /// Performance benchmark suite for Artemis optimizations
-pub struct PerformanceBenchmark {
-    provider: Arc<Provider>,
+pub struct PerformanceBenchmark<P> {
+    provider: Arc<P>,
     iterations: usize,
 }
 
@@ -23,8 +29,11 @@ pub struct BenchmarkResults {
     pub memory_usage_v2: usize,
 }
 
-impl PerformanceBenchmark {
-    pub fn new(provider: Arc<Provider>, iterations: usize) -> Self {
+impl<P> PerformanceBenchmark<P>
+where
+    P: AlloyProvider + Clone + 'static,
+{
+    pub fn new(provider: Arc<P>, iterations: usize) -> Self {
         Self {
             provider,
             iterations,

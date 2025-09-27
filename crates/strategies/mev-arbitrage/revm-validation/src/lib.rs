@@ -4,10 +4,10 @@
 //! - Symbolic execution for strategy discovery
 //! - REVM ForkDB for concrete execution validation
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use alloy_primitives::{Address, U256, Bytes};
-use tracing::{info, debug, warn, error};
+use tracing::{info, debug, warn};
 use anyhow::Result;
 
 // Note: These imports need to be from the defi-analyzer crate
@@ -655,7 +655,7 @@ impl SymbolicStrategyDiscoverer {
         Ok(investment.bvmul(&profit_rate).bvudiv(&hundred))
     }
     
-    fn extract_strategy_from_model(&self, opportunity: &ArbitrageOpportunity, model: &z3::Model) -> DeFiResult<StrategyCandidate> {
+    fn extract_strategy_from_model(&self, opportunity: &ArbitrageOpportunity, _model: &z3::Model) -> DeFiResult<StrategyCandidate> {
         Ok(StrategyCandidate {
             actions: opportunity.execution_path.clone(),
             path: opportunity.execution_path.clone(),
@@ -702,7 +702,7 @@ impl ConcreteExecutionValidator {
         // Simulate each step in the arbitrage path
         for (i, step) in strategy.path.windows(2).enumerate() {
             let (from_token, to_token) = match (&step[0], &step[1]) {
-                (DeFiAction::Swap { from, to, .. }, DeFiAction::Swap { from: to_from, to: to_to, .. }) => {
+                (DeFiAction::Swap { from, to: _, .. }, DeFiAction::Swap { from: _to_from, to: to_to, .. }) => {
                     (from.to_string(), to_to.to_string())
                 },
                 _ => continue, // Skip non-swap actions

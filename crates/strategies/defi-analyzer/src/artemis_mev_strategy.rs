@@ -72,12 +72,6 @@ pub struct GraphTheoryAnalyzer {
 
 /// Symbolic execution engine for strategy discovery
 pub struct SymbolicExecutionEngine {
-    /// Z3 context
-    ctx: z3::Context,
-    /// Symbolic EVM interpreter
-    symbolic_evm: SymbolicEVMInterpreter<'static>,
-    /// Path explorer
-    path_explorer: PathExplorer<'static>,
     /// Analysis cache
     analysis_cache: HashMap<String, SymbolicAnalysisResult>,
 }
@@ -323,19 +317,19 @@ impl CompleteMEVStrategy {
     /// Create arbitrage action from graph cycle
     fn create_arbitrage_action_from_cycle(&self, event: &AnalysisEvent, cycle: &str) -> Result<AnalysisAction> {
         Ok(AnalysisAction {
-            action_type: ActionType::ArbitrageExecution,
+            action_type: crate::types::ActionType::ArbitrageExecution,
             contract_address: event.contract_address,
             target_address: event.contract_address,
             parameters: crate::types::AnalysisParameters { abi_json: None, function_name: None, depth: 0, timeout_seconds: 0, config: HashMap::new() },
             action_id: format!("graph_arb_{}_{}", event.block_number, cycle.len()),
             calldata: self.encode_arbitrage_calldata(cycle)?,
             value: alloy_primitives::U256::ZERO,
-            gas_limit: 500_000,
-            gas_price: 25_000_000_000, // 25 gwei
+            gas_limit: alloy_primitives::U256::from(500_000),
+            gas_price: alloy_primitives::U256::from(25_000_000_000), // 25 gwei
             nonce: 0,
             chain_id: 1,
             expected_profit: alloy_primitives::U256::from(5_000_000_000_000_000u64), // 0.005 ETH
-            risk_level: RiskLevel::Low,
+            risk_level: crate::types::RiskLevel::Low,
             target_block: event.block_number + 1,
             min_timestamp: event.timestamp,
             max_timestamp: event.timestamp + 12,
@@ -347,19 +341,19 @@ impl CompleteMEVStrategy {
     /// Create action from Z3 optimization
     fn create_action_from_optimization(&self, event: &AnalysisEvent, optimization: &Z3OptimizationResult) -> Result<AnalysisAction> {
         Ok(AnalysisAction {
-            action_type: ActionType::ArbitrageExecution,
+            action_type: crate::types::ActionType::ArbitrageExecution,
             contract_address: event.contract_address,
             target_address: event.contract_address,
             parameters: crate::types::AnalysisParameters { abi_json: None, function_name: None, depth: 0, timeout_seconds: 0, config: HashMap::new() },
             action_id: format!("symbolic_arb_{}_{}", event.block_number, optimization.confidence as u32),
             calldata: self.encode_optimization_calldata(optimization)?,
             value: alloy_primitives::U256::ZERO,
-            gas_limit: 800_000, // Higher gas for complex strategies
-            gas_price: 30_000_000_000, // 30 gwei
+            gas_limit: alloy_primitives::U256::from(800_000), // Higher gas for complex strategies
+            gas_price: alloy_primitives::U256::from(30_000_000_000), // 30 gwei
             nonce: 0,
             chain_id: 1,
             expected_profit: optimization.expected_profit,
-            risk_level: if optimization.confidence > 0.8 { RiskLevel::Low } else { RiskLevel::Medium },
+            risk_level: if optimization.confidence > 0.8 { crate::types::RiskLevel::Low } else { crate::types::RiskLevel::Medium },
             target_block: event.block_number + 1,
             min_timestamp: event.timestamp,
             max_timestamp: event.timestamp + 12,
@@ -391,8 +385,8 @@ impl CompleteMEVStrategy {
             from: alloy_primitives::Address::ZERO, // Would be set
             to: Some(action.target_address.into()),
             value: action.value,
-            gas_price: alloy_primitives::U256::from(action.gas_price),
-            gas_limit: action.gas_limit,
+            gas_price: action.gas_price,
+            gas_limit: action.gas_limit.as_limbs()[0],
             data: action.calldata.clone(),
             timestamp: action.min_timestamp,
             block_number: action.target_block,
@@ -406,7 +400,7 @@ impl CompleteMEVStrategy {
                 MEVThreat::SandwichAttack(_) => {
                     // Route to Flashbots Protect
                     action.metadata.insert("protection".to_string(), "flashbots_protect".to_string());
-                    action.gas_price += 5_000_000_000; // Increase gas price
+                    action.gas_price += alloy_primitives::U256::from(5_000_000_000); // Increase gas price
                 },
                 MEVThreat::Frontrunning(_) => {
                     // Add commit-reveal protection
@@ -515,15 +509,7 @@ impl GraphTheoryAnalyzer {
 
 impl SymbolicExecutionEngine {
     async fn new() -> Result<Self> {
-        let z3_config = z3::Config::new();
-        let ctx = z3::Context::new(&z3_config);
-        let symbolic_evm = SymbolicEVMInterpreter::new(&ctx);
-        let path_explorer = PathExplorer::new(&ctx, PathExplorerConfig::default());
-        
         Ok(Self {
-            ctx,
-            symbolic_evm,
-            path_explorer,
             analysis_cache: HashMap::new(),
         })
     }
@@ -539,9 +525,15 @@ impl SymbolicExecutionEngine {
             return Ok(cached.opportunities.clone());
         }
         
+        // Create Z3 context and interpreters locally for this analysis
+        let z3_config = z3::Config::new();
+        let ctx = z3::Context::new(&z3_config);
+        let mut symbolic_evm = SymbolicEVMInterpreter::new(&ctx);
+        let mut path_explorer = PathExplorer::new(&ctx, PathExplorerConfig::default());
+        
         // Analyze contract bytecode with symbolic execution
         let contract_address = alloy_primitives::Address::from(event.contract_address);
-        let execution_paths = self.path_explorer.explore_paths(&event.transaction_data, &contract_address).await?;
+        let execution_paths = path_explorer.explore_paths(&mut symbolic_evm, event).await?;
         
         info!("🔍 Found {} execution paths to analyze", execution_paths.len());
         
@@ -609,24 +601,27 @@ impl SymbolicExecutionEngine {
     async fn z3_optimize(&self, opportunity: &ArbitrageOpportunity) -> Result<Z3OptimizationResult> {
         info!("⚡ Z3 optimizing opportunity: {}", opportunity.opportunity_type);
         
-        let solver = z3::Solver::new(&self.ctx);
+        // Create Z3 context locally for this optimization
+        let z3_config = z3::Config::new();
+        let ctx = z3::Context::new(&z3_config);
+        let solver = z3::Solver::new(&ctx);
         
         // Define optimization variables
-        let investment = z3::ast::BV::new_const(&self.ctx, "investment", 256);
-        let slippage = z3::ast::BV::new_const(&self.ctx, "slippage", 256);
+        let investment = z3::ast::BV::new_const(&ctx, "investment", 256);
+        let slippage = z3::ast::BV::new_const(&ctx, "slippage", 256);
         
         // Add constraints
-        let min_invest = z3::ast::BV::from_u64(&self.ctx, 1_000_000_000_000_000u64, 256);
-        let max_invest = z3::ast::BV::from_u64(&self.ctx, 10_000_000_000_000_000_000u64, 256);
+        let min_invest = z3::ast::BV::from_u64(&ctx, 1_000_000_000_000_000u64, 256);
+        let max_invest = z3::ast::BV::from_u64(&ctx, 10_000_000_000_000_000_000u64, 256);
         solver.assert(&investment.bvuge(&min_invest));
         solver.assert(&investment.bvule(&max_invest));
         
         // Profit optimization
-        let profit_rate = z3::ast::BV::from_u64(&self.ctx, 110, 256); // 10% profit
-        let hundred = z3::ast::BV::from_u64(&self.ctx, 100, 256);
+        let profit_rate = z3::ast::BV::from_u64(&ctx, 110, 256); // 10% profit
+        let hundred = z3::ast::BV::from_u64(&ctx, 100, 256);
         let expected_profit = investment.bvmul(&profit_rate).bvudiv(&hundred);
         
-        let min_profit = z3::ast::BV::from_u64(&self.ctx, 5_000_000_000_000_000u64, 256);
+        let min_profit = z3::ast::BV::from_u64(&ctx, 5_000_000_000_000_000u64, 256);
         solver.assert(&expected_profit.bvuge(&min_profit));
         
         // Solve
@@ -798,14 +793,15 @@ impl CompleteMEVCollector {
     
     fn convert_block_to_analysis_event(&self, block: NewBlock) -> AnalysisEvent {
         AnalysisEvent {
-            event_type: "new_block".to_string(),
+            event_type: crate::types::EventType::BlockWithDeFiActivity,
             block_number: block.number,
             contract_address: [0u8; 20].into(),
             transaction_hash: [0u8; 32],
-            transaction_data: vec![],
+            transaction_data: None,
             event_data: serde_json::to_vec(&block).unwrap_or_default(),
+            event_kind: "new_block".to_string(),
             timestamp: block.timestamp,
-            ..Default::default()
+            metadata: std::collections::HashMap::new(),
         }
     }
     
@@ -816,14 +812,15 @@ impl CompleteMEVCollector {
         }
         
         Some(AnalysisEvent {
-            event_type: "contract_log".to_string(),
+            event_type: crate::types::EventType::MempoolTransaction,
             block_number: log.block_number,
             contract_address: log.address.into(),
             transaction_hash: log.transaction_hash,
-            transaction_data: log.data,
+            transaction_data: Some(log.data),
             event_data: serde_json::to_vec(&log).unwrap_or_default(),
+            event_kind: "contract_log".to_string(),
             timestamp: log.timestamp,
-            ..Default::default()
+            metadata: std::collections::HashMap::new(),
         })
     }
     
@@ -834,14 +831,15 @@ impl CompleteMEVCollector {
         }
         
         Some(AnalysisEvent {
-            event_type: "pending_transaction".to_string(),
+            event_type: crate::types::EventType::MempoolTransaction,
             block_number: 0,
             contract_address: tx.to.unwrap_or([0u8; 20].into()),
             transaction_hash: tx.hash,
-            transaction_data: tx.input,
+            transaction_data: Some(tx.input),
             event_data: serde_json::to_vec(&tx).unwrap_or_default(),
+            event_kind: "pending_transaction".to_string(),
             timestamp: tx.timestamp,
-            ..Default::default()
+            metadata: std::collections::HashMap::new(),
         })
     }
 }

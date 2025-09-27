@@ -9,8 +9,9 @@ use revm::{
     database::InMemoryDB,
     handler::{MainBuilder, MainContext, MainnetContext},
     primitives::{keccak256, Address as RevmAddress, U256 as RevmU256, B256, KECCAK_EMPTY},
+    ExecuteEvm, Database,
 };
-use revm::context::{BlockEnv, CfgEnv, Context as RevmContext, Journal, TxEnv};
+use revm::context::{BlockEnv, CfgEnv, Context, Journal, TxEnv};
 use revm::context_interface::result::{ExecutionResult, Output};
 use revm::state::AccountInfo;
 use revm::bytecode::Bytecode;
@@ -160,17 +161,19 @@ impl RevmEngine {
     /// 执行交易
     pub fn execute_transaction(&mut self, tx_env: RevmTxEnv) -> Result<TransactionResult> {
         // 使用 Context 构建 EVM 并执行交易
-        let ctx = RevmContext::new(self.db.clone(), self.config.spec_id);
+        type EngineContext = Context<BlockEnv, TxEnv, CfgEnv, InMemoryDB, Journal<InMemoryDB>, ()>;
+
+        let ctx: EngineContext = Context::new(self.db.clone(), self.config.spec_id);
         let mut evm = ctx.build_mainnet();
         let result = evm.transact(tx_env).map_err(|e| anyhow!("交易执行失败: {}", e))?;
-        
+
         match result.result {
-            ExecutionResult::Success { gas_used, output, .. } => {
+            ExecutionResult::Success { gas_used, ref output, .. } => {
                 let output_data = match output {
                     Output::Call(data) => data.to_vec(),
                     Output::Create(data, _) => data.to_vec(),
                 };
-                
+
                 Ok(TransactionResult {
                     success: true,
                     gas_used,
@@ -179,7 +182,7 @@ impl RevmEngine {
                     revert_reason: None,
                 })
             }
-            ExecutionResult::Revert { gas_used, output } => {
+            ExecutionResult::Revert { gas_used, ref output } => {
                 Ok(TransactionResult {
                     success: false,
                     gas_used,
@@ -207,10 +210,11 @@ impl RevmEngine {
     }
     
     /// 获取账户余额
-    pub fn get_balance(&self, address: Address) -> Result<U256> {
+    pub fn get_balance(&mut self, address: Address) -> Result<U256> {
         let revm_address = RevmAddress::from_slice(address.as_slice());
         let account = self.db.load_account(revm_address)?;
-        Ok(U256::from(account.info.balance.as_limbs()))
+        let bytes = account.info.balance.to_be_bytes::<32>();
+        Ok(U256::from_be_bytes(bytes))
     }
     
     /// 获取存储值
@@ -218,7 +222,8 @@ impl RevmEngine {
         let revm_address = RevmAddress::from_slice(address.as_slice());
         let revm_slot = RevmU256::from(slot);
         let value = self.db.storage(revm_address, revm_slot)?;
-        Ok(U256::from(value.as_limbs()))
+        let bytes = value.to_be_bytes::<32>();
+        Ok(U256::from_be_bytes(bytes))
     }
     
     /// 设置账户余额
@@ -343,7 +348,7 @@ impl StateManager {
         
         self.storage.entry(weth_address)
             .or_insert_with(HashMap::new)
-            .insert(balance_slot, RevmU256::from_limbs(weth_balance.to_be_bytes().try_into().unwrap()));
+            .insert(balance_slot, RevmU256::from_be_bytes(weth_balance.to_be_bytes::<32>()));
         
         debug!("✅ 搜索者账户设置完成，WETH 余额: {}", weth_balance);
         Ok(())

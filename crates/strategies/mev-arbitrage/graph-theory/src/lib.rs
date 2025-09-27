@@ -420,7 +420,7 @@ impl NegativeCycleArbitrageEngine {
         distances.insert(source, 0.0);
         
         // Bellman-Ford relaxation
-        let mut last_updated = None;
+        let mut _last_updated = None;
         for _ in 0..(graph.nodes.len() - 1) {
             for ((u, v), weight) in &graph.edges {
                 if distances[u] != f64::INFINITY {
@@ -428,7 +428,7 @@ impl NegativeCycleArbitrageEngine {
                     if new_dist < distances[v] {
                         distances.insert(v.clone(), new_dist);
                         predecessors.insert(v.clone(), Some(u.clone()));
-                        last_updated = Some(v.clone());
+                        _last_updated = Some(v.clone());
                     }
                 }
             }

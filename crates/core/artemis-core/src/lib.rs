@@ -5,31 +5,88 @@
     attr(deny(warnings, rust_2018_idioms), allow(dead_code, unused_variables))
 ))]
 
-//! A library for writing MEV bots, designed to be simple, modular, and fast.
+//! Artemis: High-Performance MEV Bot Framework
 //!
-//! At its core, Artemis is architected as an event processing pipeline. The
-//! library is made up of three main components:
+//! Artemis is a sophisticated, modular framework for building MEV (Maximal Extractable Value) bots
+//! with enterprise-grade performance, reliability, and observability features.
 //!
-//! 1. [Collectors](types::Collector): *Collectors* take in external events (such as pending txs,
-//!  new blocks, marketplace orders, etc. ) and turn them into an internal
-//! *event* representation.
+//! ## Core Architecture
 //!
-//! 2. [Strategies](types::Strategy): *Strategies* contain the core logic required for each MEV
-//! opportunity. They take in *events* as inputs, and compute whether any
-//! opportunities are available (for example, a strategy might listen to a stream
-//! of marketplace orders to see if there are any cross-exchange arbs). *Strategies*
-//! produce *actions*.
+//! Artemis follows an advanced event-driven architecture with the following components:
 //!
-//! 3. [Executors](types::Executor): *Executors* process *actions*, and are responsible for executing
-//! them in different domains (for example, submitting txs, posting off-chain orders, etc.).
+//! 1. **[Collectors](types::Collector)**: High-performance event ingestion from multiple sources
+//!    - Real-time mempool monitoring with priority queuing
+//!    - Multi-chain block event processing
+//!    - DEX order book and AMM state tracking
 //!
-//! These components are tied together by the [Engine](engine::Engine), which is responsible for
-//! orchestrating the flow of data between them.
+//! 2. **[Strategies](types::Strategy)**: Sophisticated opportunity detection and analysis
+//!    - Advanced arbitrage detection with symbolic execution
+//!    - MEV opportunity classification and risk assessment
+//!    - Dynamic strategy adaptation based on market conditions
+//!
+//! 3. **[Executors](types::Executor)**: Efficient and reliable action execution
+//!    - Multi-executor coordination with dependency resolution
+//!    - Gas optimization and transaction batching
+//!    - Flashbots integration and private mempool routing
+//!
+//! 4. **[High-Performance Engine](engine::HighPerformanceEngine)**: Advanced orchestration system
+//!    - Priority-based event processing with backpressure handling
+//!    - Circuit breaker protection and adaptive load balancing
+//!    - Comprehensive metrics collection and alerting
+//!
+//! ## Performance Features
+//!
+//! - **Zero-copy processing** for minimal latency
+//! - **Adaptive batching** to optimize throughput
+//! - **Intelligent caching** with predictive preloading
+//! - **Multi-threaded execution** with work-stealing queues
+//! - **Resource pooling** for memory and connection optimization
+//!
+//! ## Enterprise Features
+//!
+//! - **Circuit breaker protection** for fault tolerance
+//! - **Comprehensive monitoring** with Prometheus metrics
+//! - **Hot-swappable strategies** for zero-downtime updates
+//! - **Distributed execution** with coordination protocols
+//! - **Advanced analytics** with time-series data storage
+//!
+//! ## Quick Start
+//!
+//! ```rust,no_run
+//! use artemis_core::{
+//!     engine::HighPerformanceEngine,
+//!     types::{Event, Action},
+//!     strategy_composer::StrategyComposer,
+//! };
+//!
+//! // Create a high-performance engine with custom configuration
+//! let engine = HighPerformanceEngine::new()
+//!     .with_max_concurrent_strategies(10)
+//!     .with_circuit_breaker_enabled(true)
+//!     .build();
+//!
+//! // Compose multiple strategies for parallel execution
+//! let composer = StrategyComposer::parallel()
+//!     .add_strategy(arbitrage_strategy)
+//!     .add_strategy(liquidation_strategy)
+//!     .with_performance_target(99.0) // 99th percentile latency
+//!     .build();
+//! ```
+//!
+//! ## Performance Optimization
+//!
+//! Artemis provides several optimization modules for high-frequency trading:
+//!
+//! - **[Memory Optimization](memory_optimization)**: Custom allocators and zero-copy processing
+//! - **[Concurrency Optimization](concurrency_optimization)**: Work-stealing schedulers and lock-free data structures
+//! - **[SIMD Math](simd_math)**: Vectorized mathematical operations for price calculations
+//! - **[Batch Processing](batch_processor)**: Intelligent batching for improved throughput
 
 /// This module contains [collector](types::Collector) implementations.
 pub mod collectors;
 /// This module contains the [Engine](engine::Engine) struct, which is responsible
 /// for orchestrating data flows between components
+#[path = "engine/mod.rs"]
 pub mod engine;
 /// This module provides Alloy-based Ethereum SDK adapter layer.
 pub mod eth;
@@ -59,6 +116,12 @@ pub mod simd_math;
 pub mod zero_copy;
 /// Comprehensive monitoring and alerting system.
 pub mod monitoring;
+/// Advanced strategy composition and orchestration system.
+pub mod strategy_composer;
+/// Memory optimization and zero-copy processing system.
+pub mod memory_optimization;
+/// Concurrency optimization with work-stealing schedulers and lock-free data structures.
+pub mod concurrency_optimization;
 
 // Suppress unused crate warnings
 use alloy as _;
@@ -73,3 +136,8 @@ use thiserror as _;
 use tower as _;
 use alloy_network as _;
 use alloy_signer as _;
+use bytecheck as _;
+use chrono as _;
+use csv as _;
+use hex as _;
+use rayon as _;

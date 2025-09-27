@@ -259,11 +259,24 @@ impl DeFiAnalyzerTests {
         debug!("Testing path exploration...");
         
         let config = PathExplorerConfig::default();
-        let explorer = PathExplorer::new(&self.ctx, config);
-        
+        let mut explorer = PathExplorer::new(&self.ctx, config);
+        let mut interpreter = SymbolicEVMInterpreter::new(&self.ctx);
+
         // Test path exploration with mock contract
         let contract_code = vec![0x60, 0x01, 0x60, 0x02, 0x01, 0x00]; // PUSH1 1, PUSH1 2, ADD, STOP
-        let paths = explorer.explore_paths(&contract_code, &Address::ZERO).await?;
+        let analysis_event = AnalysisEvent {
+            event_type: crate::types::EventType::ContractDeployment,
+            contract_address: Address::ZERO,
+            tx_data: Some(contract_code.clone()),
+            transaction_data: Some(contract_code.clone()),
+            transaction_hash: [0u8; 32],
+            event_data: contract_code.clone(),
+            event_kind: "test".to_string(),
+            block_number: 0,
+            timestamp: 0,
+            metadata: HashMap::new(),
+        };
+        let paths = explorer.explore_paths(&mut interpreter, &analysis_event)?;
         
         // Verify paths are generated
         assert!(!paths.is_empty());

@@ -13,7 +13,6 @@ use crate::{
     types::{AnalysisEvent, AnalysisAction, ArbitrageOpportunity, RiskLevel},
     error::{DeFiResult, DeFiAnalyzerError},
     evm_interpreter::{ExecutionPath, EVMExecutionState},
-    abi_parser::ABIParser,
 };
 
 /// Negative Cycle Arbitrage Engine
@@ -24,8 +23,6 @@ pub struct NegativeCycleArbitrageEngine {
     trading_graph: TradingGraph,
     /// Configuration
     config: NegativeCycleConfig,
-    /// ABI parser for contract interactions
-    abi_parser: ABIParser,
 }
 
 /// Configuration for negative cycle arbitrage
@@ -179,7 +176,6 @@ impl NegativeCycleArbitrageEngine {
             state_snapshot: StateSnapshot::new(),
             trading_graph: TradingGraph::new(),
             config,
-            abi_parser: ABIParser::new(),
         }
     }
 

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, Context};
-use tracing::{debug, warn, error};
+use tracing::{debug, warn};
 
 use artemis_core::{
     eth::{Address, U256},

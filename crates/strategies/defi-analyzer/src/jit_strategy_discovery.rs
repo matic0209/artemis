@@ -23,7 +23,7 @@ use crate::{
     negative_cycle_arbitrage::{
         NegativeCycleArbitrageEngine, StateSnapshot, TradingGraph, ArbitrageCycle, ArbitragePath
     },
-    evm_interpreter::{SymbolicEVMInterpreter, ExecutionPath, EVMExecutionState},
+    evm_interpreter::{ExecutionPath, EVMExecutionState},
     abi_parser::ABIParser,
     config::AnalyzerConfig,
 };
@@ -34,8 +34,6 @@ pub struct JITStrategyDiscoveryEngine {
     config: JITConfig,
     /// Negative cycle arbitrage engine (fast path)
     arb_engine: NegativeCycleArbitrageEngine,
-    /// Symbolic EVM interpreter (SMT path)
-    symbolic_evm: SymbolicEVMInterpreter<'static>,
     /// ABI parser
     abi_parser: ABIParser,
     /// State history for dependency tracking
@@ -171,9 +169,6 @@ impl Default for JITConfig {
 impl JITStrategyDiscoveryEngine {
     /// Create new JIT strategy discovery engine
     pub fn new(config: JITConfig) -> DeFiResult<Self> {
-        let z3_config = z3::Config::new();
-        let z3_ctx = z3::Context::new(&z3_config);
-        
         let arb_engine = NegativeCycleArbitrageEngine::new(
             crate::negative_cycle_arbitrage::NegativeCycleConfig {
                 target_revenue: config.target_min,
@@ -184,14 +179,12 @@ impl JITStrategyDiscoveryEngine {
             }
         );
 
-        let symbolic_evm = SymbolicEVMInterpreter::new(&z3_ctx);
         let abi_parser = ABIParser::new();
         let state_history = StateHistory::new(100);
         
         Ok(Self {
             config,
             arb_engine,
-            symbolic_evm,
             abi_parser,
             state_history,
             candidates: Vec::new(),

@@ -5,15 +5,15 @@ use tokio::sync::RwLock;
 use lru::LruCache;
 use anyhow::Result;
 
-use crate::eth::{Address, U256, Provider};
+use crate::eth::{Address, U256};
 use alloy_provider::Provider as ProviderTrait;
 
 /// Intelligent state management with predictive caching
-pub struct StateManager {
+pub struct StateManager<P> {
     /// L1 Cache: In-memory LRU cache
     l1_cache: Arc<RwLock<LruCache<StateKey, StateValue>>>,
     /// Provider for state queries
-    provider: Arc<Provider>,
+    provider: Arc<P>,
     /// Cache hit/miss statistics
     stats: Arc<RwLock<CacheStats>>,
     /// Prefetch predictor
@@ -33,11 +33,12 @@ pub enum StateKey {
 pub struct StateValue {
     data: Vec<u8>,
     timestamp: Instant,
+    #[allow(dead_code)]
     block_number: u64,
 }
 
 #[derive(Debug, Default)]
-struct CacheStats {
+pub struct CacheStats {
     hits: u64,
     misses: u64,
     prefetch_hits: u64,
@@ -56,8 +57,11 @@ struct AccessPattern {
     related_addresses: Vec<Address>,
 }
 
-impl StateManager {
-    pub fn new(provider: Arc<Provider>, cache_size: usize) -> Self {
+impl<P> StateManager<P>
+where
+    P: ProviderTrait + Clone + 'static,
+{
+    pub fn new(provider: Arc<P>, cache_size: usize) -> Self {
         Self {
             l1_cache: Arc::new(RwLock::new(LruCache::new(cache_size.try_into().unwrap()))),
             provider,
@@ -208,7 +212,7 @@ impl StateManager {
         metrics::counter!("artemis.state_manager.cache_misses").increment(1);
     }
 
-    async fn update_access_pattern(&self, address: Address) {
+    async fn update_access_pattern(&self, _address: Address) {
         // TODO: Implement ML-based access pattern learning
         // For now, just track frequency
     }
@@ -224,7 +228,10 @@ impl StateManager {
     }
 }
 
-impl Clone for StateManager {
+impl<P> Clone for StateManager<P>
+where
+    P: Clone,
+{
     fn clone(&self) -> Self {
         Self {
             l1_cache: Arc::clone(&self.l1_cache),

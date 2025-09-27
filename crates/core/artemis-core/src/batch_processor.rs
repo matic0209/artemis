@@ -1,4 +1,8 @@
-//! 批处理优化器 - 提高事件和动作的处理效率
+//! Batch Processing Optimization Module
+//!
+//! This module provides efficient batch processing capabilities for events and actions,
+//! including adaptive sizing, concurrent processing, and performance monitoring.
+//! Designed to improve throughput and reduce latency in high-volume scenarios.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -7,9 +11,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, Notify};
 use tokio::time::timeout;
 use tokio_stream::{Stream, StreamExt};
-use tracing::{debug, warn, error};
+use tracing::{debug, error};
 
-use crate::memory_pool::{GlobalMemoryPools, PooledVec};
 
 /// 批处理器配置
 #[derive(Debug, Clone)]
@@ -185,15 +188,15 @@ impl StreamBatchProcessor {
         S: Stream<Item = T> + Send + 'static,
         T: Send + 'static,
     {
-        let buffer = Arc::new(Mutex::new(Vec::<T>::with_capacity(config.batch_size)));
-        let last_batch_time = Arc::new(Mutex::new(Instant::now()));
+        let _buffer = Arc::new(Mutex::new(Vec::<T>::with_capacity(config.batch_size)));
+        let _last_batch_time = Arc::new(Mutex::new(Instant::now()));
         
         stream.chunks_timeout(config.batch_size, config.batch_timeout)
     }
 
     /// 并发处理批次
     pub async fn process_batches_concurrent<T, F, Fut>(
-        mut batches: impl Stream<Item = Vec<T>> + Unpin,
+        batches: impl Stream<Item = Vec<T>> + Unpin,
         processor: F,
         max_concurrency: usize,
     ) -> Result<(), BatchError>
@@ -229,12 +232,13 @@ pub struct AdaptiveBatchProcessor<T> {
     /// 性能统计
     stats: Arc<Mutex<BatchStats>>,
     /// 配置调整器
+    #[allow(dead_code)]
     config_tuner: ConfigTuner,
 }
 
 /// 批处理统计
 #[derive(Debug, Default)]
-struct BatchStats {
+pub struct BatchStats {
     /// 处理的批次数
     batches_processed: u64,
     /// 处理的总项目数

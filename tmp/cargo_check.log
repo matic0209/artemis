@@ -1,0 +1,111 @@
+warning: fields `state_snapshot`, `trading_graph`, and `abi_parser` are never read
+   --> crates/strategies/mev-arbitrage/graph-theory/src/lib.rs:111:5
+    |
+109 | pub struct NegativeCycleArbitrageEngine {
+    |            ---------------------------- fields in this struct
+110 |     /// Current on-chain state snapshot
+111 |     state_snapshot: StateSnapshot,
+    |     ^^^^^^^^^^^^^^
+112 |     /// Trading graph
+113 |     trading_graph: TradingGraph,
+    |     ^^^^^^^^^^^^^
+...
+117 |     abi_parser: ABIParser,
+    |     ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+    Checking mev-arbitrage-symbolic v0.1.0 (/home/ubuntu/workspace/artemis/crates/strategies/mev-arbitrage/symbolic-execution)
+warning: `mev-arbitrage-graph` (lib) generated 1 warning
+warning: field `symbolic_evm` is never read
+   --> crates/strategies/mev-arbitrage/revm-validation/src/lib.rs:119:5
+    |
+115 | pub struct SymbolicStrategyDiscoverer {
+    |            -------------------------- field in this struct
+...
+119 |     symbolic_evm: SymbolicEVMInterpreter,
+    |     ^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: fields `mock_fork_state` and `config` are never read
+   --> crates/strategies/mev-arbitrage/revm-validation/src/lib.rs:131:5
+    |
+127 | pub struct ConcreteExecutionValidator {
+    |            -------------------------- fields in this struct
+...
+131 |     mock_fork_state: MockForkState,
+    |     ^^^^^^^^^^^^^^^
+132 |     /// Configuration
+133 |     config: ConcreteValidationConfig,
+    |     ^^^^^^
+
+warning: `mev-arbitrage-revm` (lib) generated 2 warnings
+    Checking artemis-core v0.1.0 (/home/ubuntu/workspace/artemis/crates/core/artemis-core)
+warning: hard linking files in the incremental compilation cache failed. copying files instead. consider moving the cache directory to a file system which supports hard linking in session dir `/home/ubuntu/workspace/artemis/target/debug/incremental/mev_arbitrage_symbolic-1b3su0199xl8v/s-hbi3lrr64z-0ptl90q-working`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:181:16: warning: unused variable: `ctx`: help: if this is intentional, prefix it with an underscore: `_ctx`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:459:42: warning: unused variable: `contract`: help: if this is intentional, prefix it with an underscore: `_contract`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:641:21: warning: unused variable: `pc`: help: if this is intentional, prefix it with an underscore: `_pc`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:641:30: warning: unused variable: `call_context`: help: if this is intentional, prefix it with an underscore: `_call_context`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:642:19: warning: unused variable: `current_path`: help: if this is intentional, prefix it with an underscore: `_current_path`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:642:53: warning: unused variable: `execution_path_list`: help: if this is intentional, prefix it with an underscore: `_execution_path_list`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:649:28: warning: unused variable: `pc`: help: if this is intentional, prefix it with an underscore: `_pc`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:649:37: warning: unused variable: `call_context`: help: if this is intentional, prefix it with an underscore: `_call_context`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:650:26: warning: unused variable: `current_path`: help: if this is intentional, prefix it with an underscore: `_current_path`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:650:60: warning: unused variable: `execution_path_list`: help: if this is intentional, prefix it with an underscore: `_execution_path_list`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:656:30: warning: unused variable: `pc`: help: if this is intentional, prefix it with an underscore: `_pc`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:656:39: warning: unused variable: `call_context`: help: if this is intentional, prefix it with an underscore: `_call_context`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:657:29: warning: unused variable: `current_path`: help: if this is intentional, prefix it with an underscore: `_current_path`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:657:63: warning: unused variable: `execution_path_list`: help: if this is intentional, prefix it with an underscore: `_execution_path_list`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:682:53: warning: unused variable: `memory`: help: if this is intentional, prefix it with an underscore: `_memory`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:682:65: warning: unused variable: `return_data`: help: if this is intentional, prefix it with an underscore: `_return_data`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:755:13: warning: unused variable: `ctx`: help: if this is intentional, prefix it with an underscore: `_ctx`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:1020:9: error: lifetime may not live long enough: method was supposed to return data with lifetime `'a` but it is returning data with lifetime `'1`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:1372:13: warning: unused variable: `exponent`: help: if this is intentional, prefix it with an underscore: `_exponent`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:1373:13: warning: unused variable: `base`: help: if this is intentional, prefix it with an underscore: `_base`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:1384:13: warning: unused variable: `b`: help: if this is intentional, prefix it with an underscore: `_b`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:1493:76: warning: unused variable: `context`: help: if this is intentional, prefix it with an underscore: `_context`
+crates/strategies/mev-arbitrage/symbolic-execution/src/lib.rs:1650:37: warning: unused variable: `address`: help: if this is intentional, prefix it with an underscore: `_address`
+warning: `mev-arbitrage-symbolic` (lib) generated 23 warnings
+error: could not compile `mev-arbitrage-symbolic` (lib) due to 1 previous error; 23 warnings emitted
+warning: build failed, waiting for other jobs to finish...
+crates/core/artemis-core/src/memory_optimization.rs:12:15: warning: unused imports: `debug` and `error`
+crates/core/artemis-core/src/engine/high_performance_engine.rs:241:12: error[E0107]: trait takes 2 generic arguments but 0 generic arguments were supplied: expected 2 generic arguments
+crates/core/artemis-core/src/engine/high_performance_engine.rs:241:21: error[E0220]: associated type `Event` not found for `Strategy`: associated type `Event` not found
+crates/core/artemis-core/src/engine/high_performance_engine.rs:241:32: error[E0220]: associated type `Action` not found for `Strategy`: associated type `Action` not found
+crates/core/artemis-core/src/engine/high_performance_engine.rs:269:12: error[E0107]: trait takes 2 generic arguments but 0 generic arguments were supplied: expected 2 generic arguments
+crates/core/artemis-core/src/engine/high_performance_engine.rs:269:21: error[E0220]: associated type `Event` not found for `Strategy`: associated type `Event` not found
+crates/core/artemis-core/src/engine/high_performance_engine.rs:269:32: error[E0220]: associated type `Action` not found for `Strategy`: associated type `Action` not found
+crates/core/artemis-core/src/engine/high_performance_engine.rs:422:22: error[E0308]: mismatched types: expected `high_performance_engine::MetricsSummary`, found `metrics_collector::MetricsSummary`
+crates/core/artemis-core/src/engine/event_bus.rs:202:21: warning: unused variable: `processor_clone`: help: if this is intentional, prefix it with an underscore: `_processor_clone`
+crates/core/artemis-core/src/engine/event_bus.rs:203:21: warning: unused variable: `metrics`: help: if this is intentional, prefix it with an underscore: `_metrics`
+crates/core/artemis-core/src/engine/execution_coordinator.rs:464:35: warning: variable does not need to be mutable
+crates/core/artemis-core/src/strategy_composer.rs:450:58: error[E0382]: use of partially moved value: `result`: value used here after partial move
+crates/core/artemis-core/src/strategy_composer.rs:552:16: error[E0308]: mismatched types: expected `Vec<A>`, found `Result<_, _>`
+crates/core/artemis-core/src/strategy_composer.rs:563:16: error[E0308]: mismatched types: expected `Vec<A>`, found `Result<_, _>`
+crates/core/artemis-core/src/memory_optimization.rs:440:36: error[E0382]: use of moved value: `buffer`: value used here after move
+crates/core/artemis-core/src/memory_optimization.rs:451:13: warning: unused variable: `total_buffers`: help: if this is intentional, prefix it with an underscore: `_total_buffers`
+crates/core/artemis-core/src/memory_optimization.rs:778:44: error[E0277]: the trait bound `AllocationType: std::cmp::Eq` is not satisfied: the trait `std::cmp::Eq` is not implemented for `AllocationType`
+crates/core/artemis-core/src/memory_optimization.rs:778:44: error[E0277]: the trait bound `AllocationType: std::hash::Hash` is not satisfied: the trait `std::hash::Hash` is not implemented for `AllocationType`
+crates/core/artemis-core/src/concurrency_optimization.rs:561:20: error[E0308]: mismatched types: expected `Steal<Task<T>>`, found `Option<_>`
+crates/core/artemis-core/src/concurrency_optimization.rs:575:28: error[E0308]: mismatched types: expected `Steal<Task<T>>`, found `Option<_>`
+crates/core/artemis-core/src/concurrency_optimization.rs:697:14: warning: unused variable: `sender`: help: if this is intentional, prefix it with an underscore: `_sender`
+crates/core/artemis-core/src/concurrency_optimization.rs:775:13: warning: unused variable: `boxed_future`: help: if this is intentional, prefix it with an underscore: `_boxed_future`
+crates/core/artemis-core/src/concurrency_optimization.rs:784:13: warning: unused variable: `worker`: help: if this is intentional, prefix it with an underscore: `_worker`
+crates/core/artemis-core/src/engine/event_bus.rs:27:24: error[E0277]: the trait bound `std::time::Instant: serde::Serialize` is not satisfied: the trait `zero_copy::_::_serde::Serialize` is not implemented for `std::time::Instant`
+crates/core/artemis-core/src/engine/event_bus.rs:34:20: error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied: the trait `zero_copy::_::_serde::Deserialize<'_>` is not implemented for `std::time::Instant`
+crates/core/artemis-core/src/engine/event_bus.rs:27:35: error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied: the trait `zero_copy::_::_serde::Deserialize<'_>` is not implemented for `std::time::Instant`
+crates/core/artemis-core/src/engine/execution_coordinator.rs:112:5: error[E0277]: the trait bound `execution_coordinator::ExecutionError: Clone` is not satisfied: the trait `Clone` is not implemented for `execution_coordinator::ExecutionError`
+crates/core/artemis-core/src/engine/metrics_collector.rs:14:24: error[E0277]: the trait bound `std::time::Instant: serde::Serialize` is not satisfied: the trait `zero_copy::_::_serde::Serialize` is not implemented for `std::time::Instant`
+crates/core/artemis-core/src/engine/metrics_collector.rs:27:20: error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied: the trait `zero_copy::_::_serde::Deserialize<'_>` is not implemented for `std::time::Instant`
+crates/core/artemis-core/src/engine/metrics_collector.rs:14:35: error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied: the trait `zero_copy::_::_serde::Deserialize<'_>` is not implemented for `std::time::Instant`
+crates/core/artemis-core/src/engine/metrics_collector.rs:31:24: error[E0277]: the trait bound `std::time::Instant: serde::Serialize` is not satisfied: the trait `zero_copy::_::_serde::Serialize` is not implemented for `std::time::Instant`
+crates/core/artemis-core/src/engine/metrics_collector.rs:42:20: error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied: the trait `zero_copy::_::_serde::Deserialize<'_>` is not implemented for `std::time::Instant`
+crates/core/artemis-core/src/engine/metrics_collector.rs:31:35: error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied: the trait `zero_copy::_::_serde::Deserialize<'_>` is not implemented for `std::time::Instant`
+crates/core/artemis-core/src/engine/metrics_collector.rs:93:39: error[E0599]: no function or associated item named `from_minutes` found for struct `std::time::Duration` in the current scope: function or associated item not found in `std::time::Duration`
+crates/core/artemis-core/src/strategy_composer.rs:295:5: error[E0277]: the trait bound `std::time::Instant: std::default::Default` is not satisfied: the trait `std::default::Default` is not implemented for `std::time::Instant`
+crates/core/artemis-core/src/memory_optimization.rs:186:24: error[E0277]: the trait bound `std::time::Instant: serde::Serialize` is not satisfied: the trait `zero_copy::_::_serde::Serialize` is not implemented for `std::time::Instant`
+crates/core/artemis-core/src/memory_optimization.rs:189:20: error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied: the trait `zero_copy::_::_serde::Deserialize<'_>` is not implemented for `std::time::Instant`
+crates/core/artemis-core/src/memory_optimization.rs:186:35: error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied: the trait `zero_copy::_::_serde::Deserialize<'_>` is not implemented for `std::time::Instant`
+warning: `artemis-core` (lib) generated 8 warnings
+error: could not compile `artemis-core` (lib) due to 34 previous errors; 8 warnings emitted

@@ -14,6 +14,7 @@ use crate::{
     DeFiAnalyzerStrategy,
     AnalyzerConfig,
     AnalysisEvent,
+    EventType,
     JITConfig,
     error::DeFiResult,
     production_monitoring::{ProductionMetrics, MetricsConfig},

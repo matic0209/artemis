@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 use rkyv::{Archive, Deserialize, Serialize, archived_root, to_bytes, AlignedVec};
-use bytecheck::CheckBytes;
 use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
 
 use crate::eth::{Address, U256};

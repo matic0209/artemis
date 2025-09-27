@@ -1,8 +1,9 @@
 //! DeFi Analyzer Strategy for Artemis
-//! 
-//! This strategy integrates DeFiAligner's symbolic execution capabilities
-//! with Artemis's MEV framework to analyze DeFi protocols for inconsistencies
-//! and potential arbitrage opportunities.
+//!
+//! This strategy provides comprehensive DeFi protocol analysis capabilities
+//! including symbolic execution, arbitrage detection, and MEV opportunity
+//! identification. It integrates with Artemis's MEV framework to deliver
+//! production-ready DeFi analysis and arbitrage execution.
 
 pub mod strategy;
 pub mod analyzer;
@@ -36,7 +37,7 @@ pub mod tests;
 // Re-export main components
 pub use strategy::DeFiAnalyzerStrategy;
 pub use analyzer::DeFiAnalyzer;
-pub use types::{AnalysisEvent, AnalysisAction, AnalysisResult};
+pub use types::{AnalysisEvent, AnalysisAction, AnalysisResult, EventType};
 pub use config::AnalyzerConfig;
 pub use error::{DeFiAnalyzerError, DeFiResult};
 pub use arbitrage_detector::{ArbitrageDetector, ArbitrageAlgorithm};

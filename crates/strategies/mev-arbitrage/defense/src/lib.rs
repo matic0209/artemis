@@ -5,8 +5,8 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
-use alloy_primitives::{Address, U256, Bytes};
-use tracing::{info, debug, warn, error};
+use alloy_primitives::{Address, U256};
+use tracing::{info, warn, error};
 use anyhow::Result;
 
 // Note: These imports need to be from the defi-analyzer crate
@@ -91,6 +91,7 @@ pub struct MEVDefenseEngine {
     /// Frontrunning protector
     frontrun_protector: FrontrunProtector,
     /// User transaction protector
+    #[allow(dead_code)]
     user_protector: UserTransactionProtector,
     /// Defense metrics
     metrics: DefenseMetrics,
@@ -111,22 +112,29 @@ pub struct SandwichDetector {
 /// Frontrunning protector
 pub struct FrontrunProtector {
     /// Pending high-value transactions
+    #[allow(dead_code)]
     pending_transactions: HashMap<[u8; 32], ProtectedTransaction>,
     /// Protection strategies
+    #[allow(dead_code)]
     protection_strategies: Vec<ProtectionStrategy>,
     /// Configuration
+    #[allow(dead_code)]
     config: FrontrunConfig,
 }
 
 /// User transaction protector
 pub struct UserTransactionProtector {
     /// Protected user addresses
+    #[allow(dead_code)]
     protected_users: HashSet<Address>,
     /// Transaction routing rules
+    #[allow(dead_code)]
     routing_rules: Vec<RoutingRule>,
     /// Private mempool connections
+    #[allow(dead_code)]
     private_mempools: Vec<PrivateMempoolConfig>,
     /// Configuration
+    #[allow(dead_code)]
     config: UserProtectionConfig,
 }
 
@@ -651,7 +659,7 @@ impl MEVDefenseEngine {
                     // Estimate frontrunning cost (priority fee difference)
                     frontrun.estimated_cost
                 },
-                MEVThreat::GeneralMEV(general) => {
+                MEVThreat::GeneralMEV(_general) => {
                     // Estimate general MEV extraction
                     U256::from(5_000_000_000_000_000u64) // 0.005 ETH average
                 }
@@ -928,7 +936,7 @@ impl UserTransactionProtector {
 
 impl MEVDefenseEngine {
     /// Schedule delayed execution for MEV protection
-    async fn schedule_delayed_execution(&mut self, tx: TransactionInfo, delay: Duration) -> DeFiResult<()> {
+    async fn schedule_delayed_execution(&mut self, _tx: TransactionInfo, delay: Duration) -> DeFiResult<()> {
         // Implement delayed execution logic
         tokio::time::sleep(delay).await;
         // Process transaction after delay
@@ -936,7 +944,7 @@ impl MEVDefenseEngine {
     }
     
     /// Split transaction into multiple smaller transactions
-    async fn split_transaction(&mut self, tx: TransactionInfo, split_count: u32) -> DeFiResult<()> {
+    async fn split_transaction(&mut self, _tx: TransactionInfo, _split_count: u32) -> DeFiResult<()> {
         // Implement transaction splitting logic
         // Split the transaction into smaller parts to reduce MEV exposure
         Ok(())

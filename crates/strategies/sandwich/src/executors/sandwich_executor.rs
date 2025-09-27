@@ -5,29 +5,31 @@ use tracing::{info, warn, error};
 use alloy_primitives::Bytes;
 
 use artemis_core::{
-    eth::Provider,
     types::Executor,
     executors::flashbots_alloy_executor::FlashbotsAlloyExecutor,
 };
 use alloy_mev::{EthMevProviderExt, Endpoints};
-use alloy_provider::ext::MevApi;
+use alloy_provider::{ext::MevApi, Provider as ProviderTrait};
 
 use crate::types::{SandwichBundle, SandwichResult, SandwichStats};
 
 /// 专门用于 Sandwich 攻击的优化执行器
-pub struct SandwichExecutor {
+pub struct SandwichExecutor<P> {
     /// Flashbots 执行器（备用）
-    flashbots_executor: FlashbotsAlloyExecutor<Provider>,
+    flashbots_executor: FlashbotsAlloyExecutor<P>,
     /// rbuilder 执行器（主要）
     rbuilder_enabled: bool,
     /// 执行统计
     stats: SandwichStats,
     /// Provider
-    provider: Arc<Provider>,
+    provider: Arc<P>,
 }
 
-impl SandwichExecutor {
-    pub fn new(provider: Arc<Provider>, enable_rbuilder: bool) -> Self {
+impl<P> SandwichExecutor<P>
+where
+    P: ProviderTrait + Clone + 'static,
+{
+    pub fn new(provider: Arc<P>, enable_rbuilder: bool) -> Self {
         // 创建 Flashbots 执行器作为备用
         let flashbots_endpoints = Endpoints::default(); // 使用默认端点
         let flashbots_executor = FlashbotsAlloyExecutor::new(
@@ -44,7 +46,7 @@ impl SandwichExecutor {
     }
 
     /// 智能执行策略：优先使用 rbuilder，失败时降级到 Flashbots
-    async fn execute_with_fallback(&mut self, bundle: SandwichBundle) -> Result<SandwichResult> {
+    async fn execute_with_fallback(&self, bundle: SandwichBundle) -> Result<SandwichResult> {
         let start_time = std::time::Instant::now();
         
         // 首先尝试 rbuilder（如果启用）
@@ -232,7 +234,10 @@ impl SandwichExecutor {
 }
 
 #[async_trait]
-impl Executor<SandwichBundle> for SandwichExecutor {
+impl<P> Executor<SandwichBundle> for SandwichExecutor<P>
+where
+    P: ProviderTrait + Clone + 'static,
+{
     async fn execute(&self, bundle: SandwichBundle) -> Result<()> {
         let start = std::time::Instant::now();
         
@@ -242,8 +247,7 @@ impl Executor<SandwichBundle> for SandwichExecutor {
         info!("   - 估算 Gas: {}", bundle.estimated_gas);
         
         // 执行 bundle
-        let mut executor = self.clone();
-        let result = executor.execute_with_fallback(bundle).await?;
+        let result = self.execute_with_fallback(bundle).await?;
         
         let execution_time = start.elapsed();
         
@@ -262,16 +266,5 @@ impl Executor<SandwichBundle> for SandwichExecutor {
             .record(execution_time.as_millis() as f64);
         
         Ok(())
-    }
-}
-
-impl Clone for SandwichExecutor {
-    fn clone(&self) -> Self {
-        Self {
-            flashbots_executor: Arc::clone(&self.flashbots_executor),
-            rbuilder_enabled: self.rbuilder_enabled,
-            stats: self.stats.clone(),
-            provider: Arc::clone(&self.provider),
-        }
     }
 }
