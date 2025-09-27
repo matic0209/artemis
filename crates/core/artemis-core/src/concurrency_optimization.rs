@@ -10,7 +10,7 @@ use tokio::sync::{RwLock, Mutex};
 use tokio::task::JoinHandle;
 use tracing::{debug, warn, error, info};
 use serde::{Serialize, Deserialize};
-use crossbeam::deque::{Injector, Stealer, Worker};
+use crossbeam::deque::{Injector, Steal, Stealer, Worker};
 use futures::future::BoxFuture;
 
 /// Work-stealing task scheduler
@@ -415,7 +415,7 @@ pub mod lockfree {
                             Ordering::Relaxed,
                         ) {
                             Ok(_) => {
-                                unsafe { Box::from_raw(head) };
+                                unsafe { drop(Box::from_raw(head)); }
                                 self.size.fetch_sub(1, Ordering::Relaxed);
                                 return data;
                             }
@@ -558,10 +558,17 @@ where
             }
 
             // Try to get a task from global injector
-            if let Some(task) = injector.steal() {
-                Self::process_task(task, &processor, &stats).await;
-                consecutive_steals = 0;
-                continue;
+            match injector.steal() {
+                Steal::Success(task) => {
+                    Self::process_task(task, &processor, &stats).await;
+                    consecutive_steals = 0;
+                    continue;
+                }
+                Steal::Retry => {
+                    tokio::task::yield_now().await;
+                    continue;
+                }
+                Steal::Empty => {}
             }
 
             // Try work stealing if enabled
@@ -572,12 +579,19 @@ where
                         continue; // Don't steal from self
                     }
 
-                    if let Some(task) = stealer.steal() {
-                        Self::process_task(task, &processor, &stats).await;
-                        stats.tasks_stolen.fetch_add(1, Ordering::Relaxed);
-                        consecutive_steals += 1;
-                        stolen = true;
-                        break;
+                    match stealer.steal() {
+                        Steal::Success(task) => {
+                            Self::process_task(task, &processor, &stats).await;
+                            stats.tasks_stolen.fetch_add(1, Ordering::Relaxed);
+                            consecutive_steals += 1;
+                            stolen = true;
+                            break;
+                        }
+                        Steal::Retry => {
+                            tokio::task::yield_now().await;
+                            continue;
+                        }
+                        Steal::Empty => {}
                     }
                 }
 

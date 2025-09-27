@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime};
 use tokio::sync::{mpsc, RwLock, Semaphore};
 use tracing::{debug, warn, error};
 use serde::{Serialize, Deserialize};
@@ -31,7 +31,7 @@ pub struct EventMessage<T> {
     /// Processing priority
     pub priority: EventPriority,
     /// Event creation timestamp
-    pub timestamp: Instant,
+    pub timestamp: SystemTime,
     /// Event source identifier
     pub source: String,
     /// Event correlation ID for tracing
@@ -46,7 +46,7 @@ impl<T> EventMessage<T> {
         Self {
             payload,
             priority,
-            timestamp: Instant::now(),
+            timestamp: SystemTime::now(),
             source,
             correlation_id: uuid::Uuid::new_v4().to_string(),
             retry_count: 0,
@@ -55,12 +55,18 @@ impl<T> EventMessage<T> {
 
     /// Get event age in milliseconds
     pub fn age_ms(&self) -> u64 {
-        self.timestamp.elapsed().as_millis() as u64
+        match SystemTime::now().duration_since(self.timestamp) {
+            Ok(duration) => duration.as_millis() as u64,
+            Err(_) => 0,
+        }
     }
 
     /// Check if event has expired
     pub fn is_expired(&self, max_age: Duration) -> bool {
-        self.timestamp.elapsed() > max_age
+        match SystemTime::now().duration_since(self.timestamp) {
+            Ok(duration) => duration > max_age,
+            Err(_) => false,
+        }
     }
 }
 

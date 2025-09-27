@@ -1,31 +1,28 @@
-//! A strategy implementing probabilistic uniswap v3 / v2 arbitrage on MEV share. At a
-//! a high level, we listen to the stream of mev share events, and filter for trades
-//! that touch a v3 pool that we have a v2 pool for. We then submit a series of backruns
-//! of varying sizes, hoping that one of them will be profitable.
+//! MEV-Share Uniswap arbitrage strategy placeholder build.
 
-/// Alloy-based strategy implementation.
+#[cfg(feature = "full")]
 pub mod alloy_impl;
-
-/// This module contains the core strategy implementation.
+#[cfg(feature = "full")]
 pub mod strategy;
-
-/// Strategy implementation details.
+#[cfg(feature = "full")]
 pub mod strategy_impl;
-
-/// This module contains the core type definitions for the strategy.
+#[cfg(feature = "full")]
 pub mod types;
-
-/// Configuration management for the strategy.
+#[cfg(feature = "full")]
 pub mod config;
-
-/// Price oracle for real market data.
+#[cfg(feature = "full")]
 pub mod price_oracle;
-
-/// Strategy tests.
-#[cfg(test)]
+#[cfg(feature = "full")]
 mod tests;
 
-// Re-export main strategy components
+#[cfg(feature = "full")]
 pub use strategy::{MevShareUniArb, ArbConfig, ArbStats};
+#[cfg(feature = "full")]
 pub use alloy_impl::V2PoolInfo;
+#[cfg(feature = "full")]
 pub use config::{StrategyConfig, ConfigLoader};
+
+#[cfg(not(feature = "full"))]
+mod stub;
+#[cfg(not(feature = "full"))]
+pub use stub::*;

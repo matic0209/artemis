@@ -3,7 +3,7 @@
 //! This module provides sophisticated strategy orchestration capabilities,
 //! including strategy chaining, conditional execution, and dynamic optimization.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -279,7 +279,7 @@ pub struct StrategyPerformance {
 }
 
 /// Current market state
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MarketState {
     /// Current gas price in gwei
     pub gas_price_gwei: f64,
@@ -293,6 +293,19 @@ pub struct MarketState {
     pub dex_tvl: f64,
     /// Last update timestamp
     pub last_updated: Instant,
+}
+
+impl Default for MarketState {
+    fn default() -> Self {
+        Self {
+            gas_price_gwei: 0.0,
+            eth_price_usd: 0.0,
+            volatility_index: 0.0,
+            network_congestion: 0.0,
+            dex_tvl: 0.0,
+            last_updated: Instant::now(),
+        }
+    }
 }
 
 /// Composer configuration
@@ -446,7 +459,7 @@ where
         for strategy_id in strategy_ids {
             match self.execute_single_strategy(&strategy_id, event.clone()).await {
                 Ok(result) => {
-                    combined_actions.extend(result.actions);
+                    combined_actions.extend(result.actions.clone());
                     strategy_results.insert(strategy_id, result);
                 }
                 Err(e) => {
@@ -754,13 +767,11 @@ pub enum ComposerError {
     ConfigurationError(String),
 }
 
-// Trait bounds for VecDeque need Clone
-use std::collections::VecDeque;
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use anyhow::Result;
 
     // Mock strategy for testing
     struct MockStrategy {
@@ -768,12 +779,13 @@ mod tests {
     }
 
     #[async_trait]
-    impl Strategy for MockStrategy {
-        type Event = String;
-        type Action = String;
+    impl Strategy<String, String> for MockStrategy {
+        async fn sync_state(&mut self) -> Result<()> {
+            Ok(())
+        }
 
-        async fn process_event(&self, event: Self::Event) -> Result<Vec<Self::Action>, Box<dyn std::error::Error + Send + Sync>> {
-            Ok(vec![format!("action_from_{}", self.id)])
+        async fn process_event(&mut self, _event: String) -> Vec<String> {
+            vec![format!("action_from_{}", self.id)]
         }
     }
 
@@ -791,7 +803,7 @@ mod tests {
         let config = ComposerConfig::default();
         let composer: StrategyComposer<String, String> = StrategyComposer::new(config);
 
-        let strategy = Arc::new(MockStrategy {
+        let strategy: Box<dyn Strategy<String, String> + Send + Sync> = Box::new(MockStrategy {
             id: "test_strategy".to_string(),
         });
 

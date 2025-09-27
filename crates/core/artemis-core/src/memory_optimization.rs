@@ -9,7 +9,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, atomic::{AtomicUsize, AtomicU64, Ordering}};
 use std::time::{Instant, Duration, SystemTime};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info};
+use tracing::info;
 use serde::{Serialize, Deserialize};
 
 /// Custom allocator with tracking and optimization
@@ -424,6 +424,7 @@ impl ZeroCopyBufferManager {
 
         if ref_count == 1 {
             // Last reference - return to pool
+            let buffer_id = buffer.id;
             let size_class = self.find_size_class(buffer.size);
 
             {
@@ -437,7 +438,7 @@ impl ZeroCopyBufferManager {
             }
 
             // Unregister the buffer
-            self.unregister_buffer(buffer.id).await;
+            self.unregister_buffer(buffer_id).await;
         }
 
         Ok(())
@@ -448,7 +449,7 @@ impl ZeroCopyBufferManager {
         let pools = self.buffer_pools.read().await;
         let registry = self.buffer_registry.read().await;
 
-        let total_buffers: usize = registry.len();
+        let _total_buffers: usize = registry.len();
         let total_memory: u64 = registry.values()
             .map(|info| info.size as u64)
             .sum();
@@ -694,7 +695,7 @@ pub mod global_optimization {
     }
 
     /// Type of allocation
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum AllocationType {
         EventBuffer,
         ActionBuffer,

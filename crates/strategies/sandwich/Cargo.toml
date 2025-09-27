@@ -42,5 +42,6 @@ lru = "0.12"
 
 [features]
 default = []
+full = []
 debug = []
 rbuilder-integration = []

@@ -5,10 +5,10 @@ edition = "2021"
 
 [dependencies]
 # 子模块依赖
-mev-arbitrage-graph = { path = "./graph-theory" }
-mev-arbitrage-symbolic = { path = "./symbolic-execution" }
-mev-arbitrage-revm = { path = "./revm-validation" }
-mev-arbitrage-defense = { path = "./defense" }
+mev-arbitrage-graph = { path = "./graph-theory", optional = true }
+mev-arbitrage-symbolic = { path = "./symbolic-execution", optional = true }
+mev-arbitrage-revm = { path = "./revm-validation", optional = true }
+mev-arbitrage-defense = { path = "./defense", optional = true }
 
 # Artemis 核心
 artemis-core = { path = "../../core/artemis-core" }
@@ -45,4 +45,11 @@ chrono = "0.4.42"
 toml = "0.8"
 
 [features]
-default = []
+default = ["lite"]
+lite = []
+full = [
+    "mev-arbitrage-graph",
+    "mev-arbitrage-symbolic",
+    "mev-arbitrage-revm",
+    "mev-arbitrage-defense",
+]

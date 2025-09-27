@@ -6,6 +6,11 @@ edition = "2021"
 [[bin]]
 name = "complete-mev-bot"
 path = "src/main.rs"
+required-features = ["full"]
+
+[features]
+default = []
+full = []
 
 [dependencies]
 # Artemis integration

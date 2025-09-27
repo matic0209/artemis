@@ -24,3 +24,9 @@ alloy-primitives = { version = "1" }
 
 [features]
 default = []
+full = []
+
+[[bin]]
+name = "mev-share-arb"
+path = "src/main.rs"
+required-features = ["full"]

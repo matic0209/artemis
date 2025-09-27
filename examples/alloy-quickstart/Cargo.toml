@@ -13,3 +13,9 @@ rand = "0.8"
 
 [features]
 default = []
+full = []
+
+[[bin]]
+name = "alloy-quickstart"
+path = "src/main.rs"
+required-features = ["full"]

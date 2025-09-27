@@ -17,4 +17,10 @@ clap = { version = "4.2.5", features = ["derive"] }
 
 [features]
 default = []
+full = []
 rbuilder-integration = ["artemis-core/rbuilder-integration"]
+
+[[bin]]
+name = "artemis-quick-start"
+path = "src/main.rs"
+required-features = ["full"]

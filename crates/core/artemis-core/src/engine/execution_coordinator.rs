@@ -6,7 +6,7 @@
 use std::collections::{HashMap, VecDeque, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, Semaphore};
+use tokio::sync::{OwnedSemaphorePermit, RwLock, Semaphore};
 use tracing::{debug, error};
 use serde::{Serialize, Deserialize};
 
@@ -308,13 +308,13 @@ where
                 .ok_or_else(|| CoordinatorError::StepNotFound(step_id.clone()))?;
 
             // Acquire resources
-            self.resource_manager.acquire_resources(&step.resources).await?;
+            let resource_guards = self.resource_manager.acquire_resources(&step.resources).await?;
 
             // Execute step with retry logic
             let step_result = self.execute_step_with_retry(step).await;
 
             // Release resources
-            self.resource_manager.release_resources(&step.resources).await;
+            self.resource_manager.release_resources(resource_guards).await;
 
             // Update resources used
             total_resources.gas_limit += step.resources.gas_limit;
@@ -514,45 +514,75 @@ impl ResourceManager {
         }
     }
 
-    async fn acquire_resources(&self, requirements: &ResourceRequirements) -> Result<(), CoordinatorError> {
+    async fn acquire_resources(
+        &self,
+        requirements: &ResourceRequirements,
+    ) -> Result<ResourceGuards, CoordinatorError> {
         // Acquire gas
-        self.gas_pool.acquire_many(requirements.gas_limit as u32).await
+        let gas_permit = self
+            .gas_pool
+            .clone()
+            .acquire_many_owned(requirements.gas_limit as u32)
+            .await
             .map_err(|_| CoordinatorError::ResourceAcquisitionFailed("Gas".to_string()))?;
 
         // Acquire memory
-        self.memory_sem.acquire_many(requirements.memory_mb as u32).await
+        let memory_permit = self
+            .memory_sem
+            .clone()
+            .acquire_many_owned(requirements.memory_mb as u32)
+            .await
             .map_err(|_| CoordinatorError::ResourceAcquisitionFailed("Memory".to_string()))?;
 
         // Acquire CPU
         let cpu_permits = (requirements.cpu_cores * 100.0) as u32;
-        self.cpu_sem.acquire_many(cpu_permits).await
+        let cpu_permit = self
+            .cpu_sem
+            .clone()
+            .acquire_many_owned(cpu_permits)
+            .await
             .map_err(|_| CoordinatorError::ResourceAcquisitionFailed("CPU".to_string()))?;
 
         // Acquire exclusive locks
-        {
+        let acquired_locks = {
             let mut locks = self.exclusive_locks.write().await;
+
             for lock_name in &requirements.exclusive_locks {
                 if locks.contains(lock_name) {
                     return Err(CoordinatorError::ResourceLocked(lock_name.clone()));
                 }
+            }
+
+            for lock_name in &requirements.exclusive_locks {
                 locks.insert(lock_name.clone());
             }
-        }
 
-        Ok(())
+            requirements.exclusive_locks.clone()
+        };
+
+        Ok(ResourceGuards {
+            gas_permit,
+            memory_permit,
+            cpu_permit,
+            exclusive_locks: acquired_locks,
+        })
     }
 
-    async fn release_resources(&self, requirements: &ResourceRequirements) {
-        // Release exclusive locks first
+    async fn release_resources(&self, guards: ResourceGuards) {
         {
             let mut locks = self.exclusive_locks.write().await;
-            for lock_name in &requirements.exclusive_locks {
+            for lock_name in &guards.exclusive_locks {
                 locks.remove(lock_name);
             }
         }
-
-        // Note: Semaphore permits are automatically released when dropped
     }
+}
+
+struct ResourceGuards {
+    gas_permit: OwnedSemaphorePermit,
+    memory_permit: OwnedSemaphorePermit,
+    cpu_permit: OwnedSemaphorePermit,
+    exclusive_locks: Vec<String>,
 }
 
 impl DependencyResolver {
@@ -641,7 +671,7 @@ pub enum CoordinatorError {
 }
 
 /// Execution errors
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Clone)]
 pub enum ExecutionError {
     #[error("Step execution failed")]
     StepFailed,

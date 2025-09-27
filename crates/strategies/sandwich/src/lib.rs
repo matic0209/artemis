@@ -1,63 +1,44 @@
-//! # Sandwich Strategy
-//! 
-//! 基于 rusty-sando 的高性能 Sandwich 攻击策略，使用 Alloy + rbuilder 优化。
-//! 
-//! ## 功能特性
-//! 
-//! - **全面泛化**: 可以 sandwich 任何引入滑点的交易
-//! - **V2/V3 支持**: 支持 Uniswap V2 和 V3 池子
-//! - **多肉 Sandwich**: 支持多个受害者交易的 bundle
-//! - **Gas 优化**: 使用 Huff 合约和非常规 gas 优化
-//! - **本地模拟**: 快速并发 EVM 模拟寻找机会
-//! - **代币粉尘**: 在每个 bundle 结束时存储粉尘以降低下次交易的 gas
-//! - **Salmonella 检查**: 检测 ERC20 transfer 函数是否使用异常操作码
-//! 
-//! ## 架构设计
-//! 
-//! ```
-//! SandwichMempoolCollector → SandwichStrategy → SandwichExecutor
-//!           ↓                        ↓                    ↓
-//!    过滤潜在目标交易         模拟和优化机会        执行优化的 bundle
-//! ```
+//! Sandwich strategy placeholder build.
 
-/// 核心类型定义
+#[cfg(feature = "full")]
 pub mod types;
-
-/// 策略实现
+#[cfg(feature = "full")]
 pub mod strategy;
-
-/// 专用收集器
+#[cfg(feature = "full")]
 pub mod collectors;
-
-/// 专用执行器
+#[cfg(feature = "full")]
 pub mod executors;
-
-/// 合约绑定
+#[cfg(feature = "full")]
 pub mod contracts;
-
-/// 模拟器模块
+#[cfg(feature = "full")]
 pub mod simulator;
-
-/// 工具函数
+#[cfg(feature = "full")]
 pub mod utils;
-
-/// 池子管理（替代 cfmms）
+#[cfg(feature = "full")]
 pub mod pools;
-
-/// 状态查询模块
+#[cfg(feature = "full")]
 pub mod state_queries;
-
-/// REVM 引擎模块 - 高精度链上模拟
+#[cfg(feature = "full")]
 pub mod revm_engine;
-
-/// 交易执行器模块 - 三阶段 Sandwich 执行
+#[cfg(feature = "full")]
 pub mod transaction_executor;
 
-// 重新导出主要类型
+#[cfg(feature = "full")]
 pub use strategy::SandwichStrategy;
+#[cfg(feature = "full")]
 pub use types::{Event, Action, SandwichConfig, SandwichBundle, SandwichOpportunity};
+#[cfg(feature = "full")]
 pub use collectors::sandwich_mempool_collector::SandwichMempoolCollector;
+#[cfg(feature = "full")]
 pub use executors::sandwich_executor::SandwichExecutor;
+#[cfg(feature = "full")]
 pub use state_queries::{StateQuerier, PoolStateMonitor};
+#[cfg(feature = "full")]
 pub use revm_engine::{RevmEngine, RevmConfig};
+#[cfg(feature = "full")]
 pub use transaction_executor::{TransactionExecutor, SandwichSimulationResult};
+
+#[cfg(not(feature = "full"))]
+mod stub;
+#[cfg(not(feature = "full"))]
+pub use stub::*;
