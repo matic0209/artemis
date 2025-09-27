@@ -1,314 +1,70 @@
-# 🚀 Artemis - Advanced MEV Framework
+# Artemis - 以太坊高级 MEV 框架
 
-[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](https://opensource.org/licenses/MIT)
-[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
-[![MEV](https://img.shields.io/badge/MEV-Arbitrage-green.svg)](https://ethereum.org)
+> 以 Rust 构建的高性能 MEV（Maximal Extractable Value）研究与实战平台，聚焦实时行情采集、策略编排、符号执行验证以及链上执行路径优化。
 
-> **Advanced MEV (Maximal Extractable Value) framework for Ethereum with integrated graph theory, symbolic execution, and defensive strategies.**
+## 项目简介
+- 支持图论、符号执行、REVM 复现等多种分析手段，用于发现潜在套利与防御策略
+- 通过 Collector/Strategy/Executor 架构解耦数据来源、决策逻辑与执行流程
+- 提供多种示例与集成，覆盖 OpenSea、Uniswap、Sandwich 等典型场景
+- 内置 Prometheus 指标导出与基准测试模式，方便性能调优
 
-## 🎯 Overview
+## 核心特性
+- **图论分析**：基于 Bellman-Ford 等算法检测负环，构建跨市场套利路径
+- **符号执行**：集成 Z3，通过路径探索评估合约调用的可行性与风险
+- **REVM 复现**：对候选交易进行具体执行验证，确保策略可落地
+- **防御机制**：提供针对 Sandwich、抢跑/跟跑等场景的对策模块
+- **模块化扩展**：Workspace 内含核心库、策略集合、演示样例与命令行工具
 
-Artemis is a comprehensive MEV framework that combines cutting-edge technologies for maximum efficiency and profitability:
+## 快速开始
+1. **安装依赖**
+   ```bash
+   rustup update stable
+   cargo --version
+   ```
+2. **复制环境变量模板并填写密钥**
+   ```bash
+   cp env.example .env
+   # 设置 WSS、OpenSea API Key、私钥等
+   ```
+3. **构建与检查**
+   ```bash
+   cargo check --workspace
+   cargo fmt --all --check
+   ```
+4. **运行示例**（以 `bin/artemis` 主程序为例）
+   ```bash
+   cargo run -p artemis -- \
+     --wss wss://your-ethereum-node \
+     --opensea_api_key <API_KEY> \
+     --private_key <HEX_PRIVKEY> \
+     --arb_contract_address <ADDRESS> \
+     --bid_percentage 80
+   ```
+   若仅想体验框架，可从 `examples/` 目录选择更轻量的快速入门示例。
 
-- **📊 Graph Theory Analysis** - Bellman-Ford algorithm for negative cycle detection
-- **🧠 Symbolic Execution** - Z3-powered EVM analysis for strategy discovery  
-- **🔬 REVM Validation** - Concrete execution verification for strategy validation
-- **🛡️ Defense Strategies** - Protection against MEV attacks and sandwiching
-- **⚡ Artemis Integration** - Native integration with Artemis ecosystem
+## 项目结构
+- `crates/core/artemis-core`：Collector / Strategy / Executor 等核心运行时
+- `crates/core/clients`：面向第三方服务的客户端实现（如 OpenSea）
+- `crates/strategies`：MEV 策略集合，包含套利、防御、沙盒等子模块
+- `examples/`：渐进式示例，覆盖 Alloy 接入、完整 MEV Bot 等场景
+- `bin/`：框架提供的实际可执行程序（`artemis`、`cli` 等）
+- `docs/`：本次重写的中文文档
 
-## 🔧 Compilation Status
+## 文档导航
+- `docs/项目概览.md`：整体背景、使用场景与组件职责
+- `docs/快速开始.md`：环境准备、配置、运行与调试步骤
+- `docs/架构设计.md`：框架内部模块关系、数据流示意与关键接口
+- `docs/开发工作流.md`：代码风格、测试、性能分析与发布建议
+- `docs/重构评估.md`：现状分析与潜在重构方向
 
-### ✅ Recent Fixes (December 2024)
-- **Fixed 60+ compilation errors** (from 100+ to 39 remaining)
-- **Major improvements**:
-  - Fixed syntax errors and type mismatches
-  - Added missing method implementations
-  - Resolved lifetime and API compatibility issues
-  - Fixed private field access problems
-- **Progress**: ~60% of compilation errors resolved
-- **Status**: Active development, 39 errors remaining
+## 开发约定
+- 统一使用 `rustfmt`、`clippy` 保持代码风格
+- 建议在提交前执行 `cargo check --workspace --all-targets`
+- 对新增策略补充集成测试或最小化模拟验证
+- 使用 `tracing` 与 Prometheus 指标定位性能瓶颈
 
-### 📋 Error Categories Fixed
-1. ✅ Syntax Errors (2 fixed)
-2. ✅ Type Mismatch Errors (20 fixed) 
-3. ✅ Lifetime Errors (1 fixed)
-4. ✅ Missing Imports/Types (5 fixed)
-5. ✅ Missing Methods (15 fixed)
-6. ✅ Missing Fields (1 fixed)
-7. ✅ API Compatibility (3 fixed)
-8. ✅ Private Field Access (1 fixed)
-9. ✅ Provider Trait Implementation (1 fixed)
+## 许可
+本项目遵循 MIT / Apache-2.0 双许可证发布。
 
-### 🚧 Remaining Work
-- 39 compilation errors to resolve
-- Focus on missing struct fields and trait implementations
-- Thread safety improvements needed
-
-## 🏗️ Architecture
-
-### Core Modules
-
-```
-artemis/
-├── 📁 core/                          # 核心框架
-│   ├── artemis-core/                  # 核心引擎
-│   ├── clients/                       # 客户端集成
-│   └── generator/                     # 代码生成器
-├── 📁 strategies/                     # 策略模块
-│   ├── mev-arbitrage/                 # MEV 套利策略
-│   │   ├── graph-theory/              # 图论分析
-│   │   ├── symbolic-execution/        # 符号执行
-│   │   ├── revm-validation/           # REVM 验证
-│   │   └── defense/                   # 防守策略
-│   ├── sandwich/                      # 三明治攻击策略
-│   ├── uniswap-arb/                  # Uniswap 套利
-│   └── opensea-arb/                  # OpenSea 套利
-├── 📁 examples/                       # 示例应用
-│   ├── integration-demos/            # 集成演示
-│   └── quick-start/                  # 快速开始
-└── 📁 docs/                          # 文档
-    ├── architecture/                 # 架构文档
-    ├── guides/                       # 使用指南
-    └── api/                          # API 文档
-```
-
-## 🚀 Quick Start
-
-### 1. Installation
-
-```bash
-git clone https://github.com/artemis-xyz/artemis.git
-cd artemis
-cargo build --release
-```
-
-### 2. Configuration
-
-```toml
-# config/mev-arbitrage.toml
-[graph_analysis]
-enabled = true
-max_cycles = 100
-timeout_ms = 50
-
-[symbolic_execution]
-enabled = true
-max_paths = 1000
-timeout_ms = 300
-
-[revm_validation]
-enabled = true
-rpc_url = "http://localhost:8545"
-timeout_ms = 150
-
-[defense]
-enabled = true
-sandwich_protection = true
-frontrun_protection = true
-```
-
-### 3. Run Complete MEV Bot
-
-```bash
-# 运行完整的 MEV 套利机器人
-cargo run --example complete-mev-bot
-
-# 运行快速开始示例
-cargo run --example quick-start
-
-# 运行集成演示
-cargo run --example mev-arbitrage-bot
-```
-
-## 🔧 Core Technologies
-
-### 📊 Graph Theory Analysis (50ms)
-- **Bellman-Ford Algorithm** for negative cycle detection
-- **Real-time Trading Graph** updates
-- **Multi-protocol Arbitrage** path discovery
-- **Dynamic State-aware** price modeling
-
-### 🧠 Symbolic Execution (300ms)
-- **Complete EVM Interpreter** with 200+ opcodes
-- **Z3 Constraint Solver** integration
-- **Cross-contract Call** handling
-- **Mathematical Function** discovery
-
-### 🔬 REVM Validation (150ms)
-- **Fork Simulation** for concrete validation
-- **Precise Gas Cost** calculation
-- **Actual Profit** verification
-- **Execution Trace** analysis
-
-### 🛡️ MEV Defense (50ms)
-- **Sandwich Attack** detection and prevention
-- **Frontrunning Protection** mechanisms
-- **User Transaction** protection
-- **Real-time Threat** analysis
-
-## 📚 Examples
-
-### Complete MEV Arbitrage Bot
-
-```rust
-use mev_arbitrage::{
-    CompleteMEVArbitrageStrategy,
-    setup_complete_artemis_mev_arbitrage,
-    MEVArbitrageConfig,
-};
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    // 配置 MEV 套利策略
-    let config = MEVArbitrageConfig::load_from_file("config/mev-arbitrage.toml")?;
-    
-    // 设置完整的 Artemis MEV 引擎
-    let mut engine = setup_complete_artemis_mev_arbitrage(config).await?;
-    
-    // 运行引擎
-    engine.run().await?;
-    
-    Ok(())
-}
-```
-
-### Graph Theory Analysis
-
-```rust
-use mev_arbitrage_graph::{
-    NegativeCycleArbitrageEngine,
-    NegativeCycleConfig,
-    StateSnapshot,
-};
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    let config = NegativeCycleConfig::default();
-    let mut engine = NegativeCycleArbitrageEngine::new(config)?;
-    
-    let snapshot = StateSnapshot::from_block(12345678);
-    let profit = engine.execute_arbitrage_algorithm(&snapshot).await?;
-    
-    println!("发现套利利润: {} wei", profit);
-    Ok(())
-}
-```
-
-### Symbolic Execution
-
-```rust
-use mev_arbitrage_symbolic::{
-    SymbolicEVMInterpreter,
-    ABIParser,
-    PathExplorer,
-};
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    let mut interpreter = SymbolicEVMInterpreter::new()?;
-    let abi_parser = ABIParser::new();
-    let path_explorer = PathExplorer::new();
-    
-    // 分析合约字节码
-    let bytecode = hex::decode("608060405234801561001057600080fd5b50...")?;
-    let paths = interpreter.analyze_bytecode(&bytecode).await?;
-    
-    println!("发现 {} 条执行路径", paths.len());
-    Ok(())
-}
-```
-
-## 🛡️ Defense Strategies
-
-### Sandwich Attack Protection
-
-```rust
-use mev_arbitrage_defense::{
-    MEVDefenseEngine,
-    SandwichDetector,
-    FrontrunProtector,
-};
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    let defense_engine = MEVDefenseEngine::new();
-    let sandwich_detector = SandwichDetector::new();
-    let frontrun_protector = FrontrunProtector::new();
-    
-    // 检测三明治攻击
-    let is_sandwich = sandwich_detector.detect_sandwich_attack(&tx).await?;
-    if is_sandwich {
-        println!("检测到三明治攻击，应用保护策略");
-    }
-    
-    Ok(())
-}
-```
-
-## 📊 Performance Metrics
-
-| 技术 | 执行时间 | 成功率 | 利润提升 |
-|------|----------|--------|----------|
-| 图论分析 | 50ms | 95% | +15% |
-| 符号执行 | 300ms | 90% | +25% |
-| REVM验证 | 150ms | 98% | +5% |
-| 防守策略 | 50ms | 99% | +10% |
-| **总计** | **550ms** | **92%** | **+55%** |
-
-## 🔗 Integration
-
-### Artemis Ecosystem
-
-```rust
-use artemis_core::{
-    types::{Collector, Executor, Strategy},
-    engine::Engine,
-};
-
-// 完整的 Artemis 集成
-let engine = Engine::new()
-    .with_strategy(mev_strategy)
-    .with_collector(block_collector)
-    .with_collector(log_collector)
-    .with_executor(flashbots_executor);
-```
-
-### External Protocols
-
-- **Uniswap V2/V3** - DEX 套利
-- **SushiSwap** - 多协议套利
-- **Curve** - 稳定币套利
-- **OpenSea** - NFT 套利
-
-## 📖 Documentation
-
-- [Architecture Guide](docs/architecture/)
-- [API Reference](docs/api/)
-- [Integration Examples](examples/integration-demos/)
-- [Performance Guide](docs/guides/PERFORMANCE_OPTIMIZATION_GUIDE.md)
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under either of:
-
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT License ([LICENSE-MIT](LICENSE-MIT))
-
-## 🙏 Acknowledgments
-
-- [Alloy](https://github.com/alloy-rs/alloy) - Ethereum primitives
-- [Z3](https://github.com/Z3Prover/z3) - SMT solver
-- [REVM](https://github.com/bluealloy/revm) - EVM implementation
-- [Artemis](https://github.com/artemis-xyz/artemis) - MEV framework
-
----
-
-**🚀 Ready to maximize your MEV profits with Artemis!**
+## 重构提示
+框架当前能够通过 `cargo check --workspace`（存在若干未使用字段的警告）。重构建议及优先级详见 `docs/重构评估.md`。

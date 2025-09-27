@@ -19,6 +19,7 @@ members = [
     "examples/alloy-quickstart",
     "examples/defi-analyzer",
     "examples/mev-share-arb",
+    "examples/strategies",
     "examples/integration-demos/complete-mev-bot",
     "examples/integration-demos/mev-arbitrage-bot",
     "examples/integration-demos/sandwich-bot",
