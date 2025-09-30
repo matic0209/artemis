@@ -269,3 +269,15 @@ pub struct RiskFactor {
     /// Description
     pub description: String,
 }
+
+/// 为InconsistencyType实现Display以支持to_string()
+impl std::fmt::Display for InconsistencyType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InconsistencyType::GasOptimizationIssue => write!(f, "gas_optimization"),
+            InconsistencyType::LogicInconsistency => write!(f, "logic_inconsistency"),
+            InconsistencyType::StateInconsistency => write!(f, "state_inconsistency"),
+            InconsistencyType::DocumentationMismatch => write!(f, "documentation_mismatch"),
+        }
+    }
+}

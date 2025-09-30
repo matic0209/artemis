@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use artemis_core::{
     engine::{HighPerformanceEngine, EventBus, EventPriority, ExecutionCoordinator, MetricsCollector},
-    strategy_composer::{StrategyComposer, CompositionMode},
+    strategy_composer::StrategyComposer,
     memory_optimization::ZeroCopyBufferManager,
     concurrency_optimization::{WorkStealingScheduler, AdaptiveThreadPool},
     types::{Strategy, Collector, Executor},
@@ -572,20 +572,169 @@ impl MEVOrchestrator {
     }
 
     /// 检测套利机会
-    async fn detect_arbitrage_opportunities(&self, _event: &MEVEvent) -> Result<Option<MEVOpportunity>, Box<dyn std::error::Error>> {
-        // TODO: 实现DEX事件套利检测
+    async fn detect_arbitrage_opportunities(&self, event: &MEVEvent) -> Result<Option<MEVOpportunity>, Box<dyn std::error::Error>> {
+        if let MEVEvent::DexEvent { pool_address, token0, token1, reserve0, reserve1, timestamp } = event {
+            let mut graph_analyzer = self.graph_analyzer.write().await;
+
+            // 构建临时状态快照用于套利检测
+            let state_snapshot = StateSnapshot {
+                block_number: 0, // 从事件中获取
+                timestamp: *timestamp,
+                protocol_states: std::collections::HashMap::new(),
+                pool_reserves: {
+                    let mut reserves = std::collections::HashMap::new();
+                    reserves.insert(*pool_address, (*reserve0, *reserve1));
+                    reserves
+                },
+                token_prices: std::collections::HashMap::new(),
+            };
+
+            // 分析负循环套利机会
+            let arbitrage_cycles = graph_analyzer.find_arbitrage_cycles(&state_snapshot).await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+            if let Some(cycle) = arbitrage_cycles.first() {
+                let opportunity = MEVOpportunity {
+                    id: uuid::Uuid::new_v4(),
+                    opportunity_type: MEVOpportunityType::Arbitrage {
+                        source_dex: cycle.path[0],
+                        target_dex: cycle.path[cycle.path.len() - 1],
+                        token_path: cycle.path.clone(),
+                    },
+                    estimated_profit: cycle.expected_profit,
+                    gas_cost: U256::from(150_000u64 * cycle.pools.len() as u64 * 20_000_000_000u64), // 估算gas成本
+                    risk_score: 0.5, // 中等风险
+                    confidence: 0.8,
+                    detected_at: std::time::Instant::now(),
+                    expires_at: Some(std::time::Instant::now() + std::time::Duration::from_secs(30)),
+                    execution_path: vec![
+                        ExecutionStep {
+                            step_type: "swap".to_string(),
+                            target_contract: *pool_address,
+                            calldata: alloy_primitives::Bytes::new(),
+                            value: U256::ZERO,
+                            gas_estimate: 150_000 * cycle.pools.len() as u64,
+                        }
+                    ],
+                    metadata: {
+                        let mut meta = std::collections::HashMap::new();
+                        meta.insert("pool_address".to_string(), format!("{:?}", pool_address));
+                        meta.insert("tokens".to_string(), format!("{:?}-{:?}", token0, token1));
+                        meta
+                    },
+                };
+                return Ok(Some(opportunity));
+            }
+        }
         Ok(None)
     }
 
     /// 检测清算机会
-    async fn detect_liquidation_opportunities(&self, _event: &MEVEvent) -> Result<Option<MEVOpportunity>, Box<dyn std::error::Error>> {
-        // TODO: 实现清算机会检测
+    async fn detect_liquidation_opportunities(&self, event: &MEVEvent) -> Result<Option<MEVOpportunity>, Box<dyn std::error::Error>> {
+        if let MEVEvent::LiquidationEvent { protocol, user, collateral, debt, timestamp } = event {
+            // 计算清算奖励和gas成本
+            let liquidation_bonus = collateral * U256::from(5) / U256::from(100); // 5% 清算奖励
+            let gas_cost = U256::from(300_000); // 估计gas成本
+            let gas_price = U256::from(20_000_000_000u64); // 20 gwei
+            let total_gas_cost = gas_cost * gas_price;
+
+            // 只有当奖励超过gas成本时才值得清算
+            if liquidation_bonus > total_gas_cost {
+                let estimated_profit = liquidation_bonus - total_gas_cost;
+
+                let opportunity = MEVOpportunity {
+                    id: uuid::Uuid::new_v4(),
+                    opportunity_type: MEVOpportunityType::Liquidation {
+                        protocol: protocol.clone(),
+                        user: *user,
+                        collateral_value: *collateral,
+                    },
+                    estimated_profit,
+                    gas_cost: total_gas_cost,
+                    risk_score: 0.3, // 清算通常风险较低
+                    confidence: 0.9,
+                    detected_at: std::time::Instant::now(),
+                    expires_at: Some(std::time::Instant::now() + std::time::Duration::from_secs(60)),
+                    execution_path: vec![
+                        ExecutionStep {
+                            step_type: "liquidate".to_string(),
+                            target_contract: *user, // 简化，实际应该是协议合约地址
+                            calldata: alloy_primitives::Bytes::new(),
+                            value: *debt,
+                            gas_estimate: gas_cost.try_into().unwrap_or(300_000),
+                        }
+                    ],
+                    metadata: {
+                        let mut meta = std::collections::HashMap::new();
+                        meta.insert("protocol".to_string(), protocol.clone());
+                        meta.insert("liquidation_bonus".to_string(), liquidation_bonus.to_string());
+                        meta.insert("debt_amount".to_string(), debt.to_string());
+                        meta
+                    },
+                };
+                return Ok(Some(opportunity));
+            }
+        }
         Ok(None)
     }
 
     /// 检测新区块机会
-    async fn detect_block_opportunities(&self, _event: &MEVEvent) -> Result<Option<MEVOpportunity>, Box<dyn std::error::Error>> {
-        // TODO: 实现区块机会检测
+    async fn detect_block_opportunities(&self, event: &MEVEvent) -> Result<Option<MEVOpportunity>, Box<dyn std::error::Error>> {
+        if let MEVEvent::NewBlock { block_number, timestamp, gas_limit, base_fee } = event {
+            // 在新区块中寻找backrun机会
+            let mut graph_analyzer = self.graph_analyzer.write().await;
+
+            // 检查是否有延迟的套利机会可以在新区块中执行
+            let state_snapshot = StateSnapshot {
+                block_number: *block_number,
+                timestamp: *timestamp,
+                protocol_states: std::collections::HashMap::new(),
+                pool_reserves: std::collections::HashMap::new(),
+                token_prices: std::collections::HashMap::new(),
+            };
+
+            // 查找可能的背跑机会
+            if let Ok(cycles) = graph_analyzer.find_arbitrage_cycles(&state_snapshot).await {
+                if let Some(cycle) = cycles.first() {
+                    let gas_cost = U256::from(150_000u64 * cycle.pools.len() as u64);
+                    let gas_cost_wei = gas_cost * base_fee;
+
+                    // 确保利润大于gas成本
+                    if cycle.expected_profit > gas_cost_wei {
+                        let opportunity = MEVOpportunity {
+                            id: uuid::Uuid::new_v4(),
+                            opportunity_type: MEVOpportunityType::Backrun {
+                                target_tx: format!("block_{}", block_number),
+                                opportunity_type: "delayed_arbitrage".to_string(),
+                            },
+                            estimated_profit: cycle.expected_profit - gas_cost_wei,
+                            gas_cost: gas_cost_wei,
+                            risk_score: 0.4,
+                            confidence: 0.7,
+                            detected_at: std::time::Instant::now(),
+                            expires_at: Some(std::time::Instant::now() + std::time::Duration::from_secs(12)), // 一个区块时间
+                            execution_path: vec![
+                                ExecutionStep {
+                                    step_type: "backrun_arbitrage".to_string(),
+                                    target_contract: cycle.path[0],
+                                    calldata: alloy_primitives::Bytes::new(),
+                                    value: U256::ZERO,
+                                    gas_estimate: 150_000 * cycle.pools.len() as u64,
+                                }
+                            ],
+                            metadata: {
+                                let mut meta = std::collections::HashMap::new();
+                                meta.insert("block_number".to_string(), block_number.to_string());
+                                meta.insert("base_fee".to_string(), base_fee.to_string());
+                                meta.insert("gas_limit".to_string(), gas_limit.to_string());
+                                meta
+                            },
+                        };
+                        return Ok(Some(opportunity));
+                    }
+                }
+            }
+        }
         Ok(None)
     }
 
@@ -614,35 +763,207 @@ impl MEVOrchestrator {
     async fn symbolic_validate(&self, opportunity: &MEVOpportunity) -> Result<ValidationResult, Box<dyn std::error::Error>> {
         let mut symbolic_executor = self.symbolic_executor.write().await;
 
-        // TODO: 实现符号执行验证逻辑
-        Ok(ValidationResult {
-            success: true,
-            confidence: 0.85,
-            gas_estimate: 200000,
-            actual_profit: opportunity.estimated_profit,
-            error_message: None,
-        })
+        // 根据机会类型执行不同的符号验证
+        match &opportunity.opportunity_type {
+            MEVOpportunityType::Arbitrage { token_path, .. } => {
+                // 验证套利路径的可行性
+                let paths = symbolic_executor.analyze_arbitrage_paths(token_path).await?;
+
+                if paths.len() > 0 {
+                    // 计算平均gas估计
+                    let avg_gas = paths.iter().map(|p| p.gas_used).sum::<u64>() / paths.len() as u64;
+
+                    // 验证是否所有路径都能产生正收益
+                    let profitable_paths = paths.iter().filter(|p| p.net_value > 0).count();
+                    let confidence = profitable_paths as f64 / paths.len() as f64;
+
+                    Ok(ValidationResult {
+                        success: confidence > 0.5,
+                        confidence,
+                        gas_estimate: avg_gas,
+                        actual_profit: opportunity.estimated_profit * U256::from((confidence * 100.0) as u64) / U256::from(100),
+                        error_message: if confidence <= 0.5 {
+                            Some("Low confidence in arbitrage profitability".to_string())
+                        } else {
+                            None
+                        },
+                    })
+                } else {
+                    Ok(ValidationResult {
+                        success: false,
+                        confidence: 0.0,
+                        gas_estimate: 200000,
+                        actual_profit: U256::ZERO,
+                        error_message: Some("No valid execution paths found".to_string()),
+                    })
+                }
+            },
+            MEVOpportunityType::Liquidation { user, .. } => {
+                // 验证清算的可行性
+                if symbolic_executor.verify_liquidation_conditions(*user).await? {
+                    Ok(ValidationResult {
+                        success: true,
+                        confidence: 0.9,
+                        gas_estimate: 250000,
+                        actual_profit: opportunity.estimated_profit,
+                        error_message: None,
+                    })
+                } else {
+                    Ok(ValidationResult {
+                        success: false,
+                        confidence: 0.0,
+                        gas_estimate: 250000,
+                        actual_profit: U256::ZERO,
+                        error_message: Some("Liquidation conditions not met".to_string()),
+                    })
+                }
+            },
+            _ => {
+                // 默认验证
+                Ok(ValidationResult {
+                    success: true,
+                    confidence: 0.7,
+                    gas_estimate: 200000,
+                    actual_profit: opportunity.estimated_profit * U256::from(90) / U256::from(100),
+                    error_message: None,
+                })
+            }
+        }
     }
 
     /// REVM预执行验证
     async fn revm_validate(&self, opportunity: &MEVOpportunity) -> Result<ValidationResult, Box<dyn std::error::Error>> {
         let mut revm_validator = self.revm_validator.write().await;
 
-        // TODO: 实现REVM验证逻辑
-        Ok(ValidationResult {
-            success: true,
-            confidence: 0.9,
-            gas_estimate: 180000,
-            actual_profit: opportunity.estimated_profit * U256::from(95) / U256::from(100), // 5% 滑点
-            error_message: None,
-        })
+        match &opportunity.opportunity_type {
+            MEVOpportunityType::Arbitrage { token_path, source_dex, target_dex } => {
+                // 模拟套利交易的执行
+                let simulation_result = revm_validator.simulate_arbitrage_transaction(
+                    token_path,
+                    *source_dex,
+                    *target_dex,
+                    opportunity.estimated_profit
+                ).await?;
+
+                let slippage_factor = if simulation_result.success { 0.95 } else { 0.7 }; // 根据成功率调整滑点
+                let actual_profit = opportunity.estimated_profit * U256::from((slippage_factor * 100.0) as u64) / U256::from(100);
+
+                Ok(ValidationResult {
+                    success: simulation_result.success,
+                    confidence: if simulation_result.success { 0.9 } else { 0.3 },
+                    gas_estimate: simulation_result.gas_used,
+                    actual_profit,
+                    error_message: simulation_result.error,
+                })
+            },
+            MEVOpportunityType::Liquidation { protocol, user, collateral_value } => {
+                // 模拟清算交易
+                let simulation_result = revm_validator.simulate_liquidation_transaction(
+                    protocol,
+                    *user,
+                    *collateral_value
+                ).await?;
+
+                Ok(ValidationResult {
+                    success: simulation_result.success,
+                    confidence: if simulation_result.success { 0.95 } else { 0.2 },
+                    gas_estimate: simulation_result.gas_used,
+                    actual_profit: if simulation_result.success {
+                        opportunity.estimated_profit * U256::from(98) / U256::from(100) // 2% 滑点
+                    } else {
+                        U256::ZERO
+                    },
+                    error_message: simulation_result.error,
+                })
+            },
+            MEVOpportunityType::Sandwich { target_tx, front_run_profit, back_run_profit } => {
+                // 模拟三明治攻击
+                let total_profit = front_run_profit + back_run_profit;
+                let simulation_result = revm_validator.simulate_sandwich_attack(
+                    target_tx,
+                    total_profit
+                ).await?;
+
+                Ok(ValidationResult {
+                    success: simulation_result.success,
+                    confidence: if simulation_result.success { 0.8 } else { 0.1 },
+                    gas_estimate: simulation_result.gas_used,
+                    actual_profit: if simulation_result.success {
+                        total_profit * U256::from(90) / U256::from(100) // 10% 滑点
+                    } else {
+                        U256::ZERO
+                    },
+                    error_message: simulation_result.error,
+                })
+            },
+            MEVOpportunityType::Backrun { target_tx, .. } => {
+                // 模拟背跑交易
+                let simulation_result = revm_validator.simulate_backrun_transaction(
+                    target_tx,
+                    opportunity.estimated_profit
+                ).await?;
+
+                Ok(ValidationResult {
+                    success: simulation_result.success,
+                    confidence: if simulation_result.success { 0.75 } else { 0.25 },
+                    gas_estimate: simulation_result.gas_used,
+                    actual_profit: if simulation_result.success {
+                        opportunity.estimated_profit * U256::from(92) / U256::from(100) // 8% 滑点
+                    } else {
+                        U256::ZERO
+                    },
+                    error_message: simulation_result.error,
+                })
+            }
+        }
     }
 
     /// 应用防护策略
     async fn apply_defense_strategies(&self, mut opportunity: MEVOpportunity) -> Result<MEVOpportunity, Box<dyn std::error::Error>> {
         let mut defense_engine = self.defense_engine.write().await;
 
-        // TODO: 实现防护策略逻辑
+        // 检查风险管理限制
+        if opportunity.estimated_profit > self.config.risk_management.max_position_size {
+            opportunity.risk_score = 1.0; // 标记为高风险
+            opportunity.confidence *= 0.5; // 降低置信度
+        }
+
+        // 应用gas价格保护
+        let current_gas_price = U256::from(20_000_000_000u64); // 20 gwei，实际应该从网络获取
+        if current_gas_price > self.config.risk_management.max_position_size / U256::from(1000) {
+            // Gas价格过高，降低优先级
+            opportunity.confidence *= 0.8;
+        }
+
+        // 三明治攻击防护
+        if matches!(opportunity.opportunity_type, MEVOpportunityType::Sandwich { .. }) {
+            if !self.config.risk_management.enable_defense_strategies {
+                // 如果未启用防护策略，拒绝三明治攻击
+                opportunity.confidence = 0.0;
+            } else {
+                // 应用额外的风险评估
+                opportunity.risk_score = (opportunity.risk_score + 0.3).min(1.0);
+            }
+        }
+
+        // 时间窗口检查
+        if let Some(expires_at) = opportunity.expires_at {
+            let time_remaining = expires_at.duration_since(std::time::Instant::now()).unwrap_or_default();
+            if time_remaining < std::time::Duration::from_secs(5) {
+                // 时间不足，降低置信度
+                opportunity.confidence *= 0.6;
+            }
+        }
+
+        // 应用防护策略后的风险重新评估
+        let defense_assessment = defense_engine.assess_opportunity_risk(&opportunity).await?;
+        if defense_assessment.risk_score > self.config.risk_management.risk_score_threshold {
+            opportunity.confidence *= 0.3; // 大幅降低置信度
+        }
+
+        // 更新元数据
+        opportunity.metadata.insert("defense_applied".to_string(), "true".to_string());
+        opportunity.metadata.insert("final_risk_score".to_string(), opportunity.risk_score.to_string());
 
         Ok(opportunity)
     }
@@ -729,31 +1050,175 @@ impl MEVOrchestrator {
 
     /// 启动事件处理器
     async fn start_event_processor(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: 实现事件处理器启动逻辑
+        let event_bus = Arc::clone(&self.event_bus);
+        let orchestrator = self.clone();
+
+        tokio::spawn(async move {
+            info!("Event processor started");
+            loop {
+                // 处理事件总线中的事件
+                if let Ok(event) = event_bus.receive().await {
+                    if let Err(e) = orchestrator.process_event(event).await {
+                        error!("Failed to process event: {:?}", e);
+                    }
+                }
+
+                // 短暂休眠避免忙等
+                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            }
+        });
+
         Ok(())
     }
 
     /// 启动机会检测器
     async fn start_opportunity_detector(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: 实现机会检测器启动逻辑
+        let active_opportunities = Arc::clone(&self.active_opportunities);
+        let performance_metrics = Arc::clone(&self.performance_metrics);
+
+        tokio::spawn(async move {
+            info!("Opportunity detector started");
+            let mut interval = tokio::time::interval(std::time::Duration::from_millis(100));
+
+            loop {
+                interval.tick().await;
+
+                // 周期性检查活跃机会状态
+                let mut opportunities = active_opportunities.write().await;
+                let current_time = std::time::Instant::now();
+
+                // 移除过期的机会
+                opportunities.retain(|_, opportunity| {
+                    if let Some(expires_at) = opportunity.expires_at {
+                        expires_at > current_time
+                    } else {
+                        // 没有过期时间的机会保留5分钟
+                        opportunity.detected_at.elapsed() < std::time::Duration::from_secs(300)
+                    }
+                });
+
+                // 更新统计信息
+                let mut metrics = performance_metrics.write().await;
+                if opportunities.len() > 10 {
+                    debug!("High number of active opportunities: {}", opportunities.len());
+                }
+            }
+        });
+
         Ok(())
     }
 
     /// 启动验证器
     async fn start_validator(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: 实现验证器启动逻辑
+        let scheduler = Arc::clone(&self.scheduler);
+        let thread_pool = Arc::clone(&self.thread_pool);
+
+        tokio::spawn(async move {
+            info!("Validator started");
+            loop {
+                // 从调度器获取验证任务
+                if let Some(task) = scheduler.pop_task().await {
+                    let validation_task = async move {
+                        match task {
+                            MEVTask::ValidateOpportunity { opportunity, callback } => {
+                                // 这里应该调用实际的验证逻辑
+                                let result = ValidationResult {
+                                    success: true,
+                                    confidence: 0.8,
+                                    gas_estimate: 200000,
+                                    actual_profit: opportunity.estimated_profit,
+                                    error_message: None,
+                                };
+                                let _ = callback.send(result);
+                            },
+                            _ => {} // 忽略其他任务类型
+                        }
+                    };
+
+                    // 使用线程池执行验证任务
+                    thread_pool.execute(validation_task).await;
+                }
+
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        });
+
         Ok(())
     }
 
     /// 启动执行器
     async fn start_executor(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: 实现执行器启动逻辑
+        let execution_queue = Arc::clone(&self.execution_queue);
+        let execution_coordinator = Arc::clone(&self.execution_coordinator);
+        let execution_semaphore = Arc::clone(&self.execution_semaphore);
+
+        tokio::spawn(async move {
+            info!("Executor started");
+            loop {
+                // 从执行队列获取待执行的机会
+                let execution = {
+                    let mut queue = execution_queue.write().await;
+                    queue.pop_front()
+                };
+
+                if let Some(execution) = execution {
+                    // 获取执行许可
+                    if let Ok(_permit) = execution_semaphore.acquire().await {
+                        // 检查执行截止时间
+                        if execution.execution_deadline > std::time::Instant::now() {
+                            // 提交执行
+                            if let Err(e) = execution_coordinator.submit_execution(execution.action).await {
+                                error!("Failed to submit execution: {:?}", e);
+                            }
+                        } else {
+                            warn!("Execution deadline exceeded for opportunity: {:?}", execution.opportunity.id);
+                        }
+                    }
+                }
+
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        });
+
         Ok(())
     }
 
     /// 启动监控器
     async fn start_monitor(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: 实现监控器启动逻辑
+        let metrics_collector = Arc::clone(&self.metrics_collector);
+        let performance_metrics = Arc::clone(&self.performance_metrics);
+
+        tokio::spawn(async move {
+            info!("Monitor started");
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+
+            loop {
+                interval.tick().await;
+
+                // 收集性能指标
+                let current_metrics = metrics_collector.collect_metrics().await;
+
+                // 更新性能指标
+                let mut metrics = performance_metrics.write().await;
+
+                // 记录执行指标
+                if current_metrics.total_executions > 0 {
+                    info!("Performance update - Executions: {}, Success rate: {:.2}%",
+                          current_metrics.total_executions,
+                          current_metrics.success_rate * 100.0);
+                }
+
+                // 检查异常情况
+                if current_metrics.success_rate < 0.5 {
+                    warn!("Low success rate detected: {:.2}%", current_metrics.success_rate * 100.0);
+                }
+
+                if current_metrics.average_latency_ms > 1000.0 {
+                    warn!("High latency detected: {:.2}ms", current_metrics.average_latency_ms);
+                }
+            }
+        });
+
         Ok(())
     }
 

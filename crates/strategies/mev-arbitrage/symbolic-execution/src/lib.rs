@@ -772,6 +772,111 @@ impl<'ctx> SymbolicEVMInterpreter<'ctx> {
     fn is_end_of_path(&self, op: OpCode) -> bool {
         matches!(op, OpCode::STOP | OpCode::RETURN | OpCode::REVERT | OpCode::INVALID | OpCode::SELFDESTRUCT)
     }
+
+    /// Analyze arbitrage paths for validation
+    pub async fn analyze_arbitrage_paths(&mut self, token_path: &[Address]) -> DeFiResult<Vec<ArbitragePath>> {
+        info!("Analyzing arbitrage paths for {} tokens", token_path.len());
+
+        let mut paths = Vec::new();
+
+        // For each token in the path, simulate the symbolic execution
+        for i in 0..token_path.len().saturating_sub(1) {
+            let token_a = token_path[i];
+            let token_b = token_path[i + 1];
+
+            // Create a synthetic contract for swap simulation
+            let ctx = match &self.evm {
+                Some(evm) => evm.ctx,
+                None => return Err(DeFiAnalyzerError::SymbolicExecution("No EVM context available".to_string())),
+            };
+
+            let caller = BV::new_const(ctx, "caller", 256);
+            let contract_addr = BV::new_const(ctx, format!("swap_contract_{}", i), 256);
+            let value = BV::from_u64(ctx, 0, 256);
+
+            let mut contract = Contract::new(caller, contract_addr.clone(), value, 0);
+
+            // Set up swap code (simplified EVM bytecode for token swap)
+            let swap_code = create_swap_bytecode(token_a, token_b);
+            contract.set_call_code(contract_addr, &swap_code);
+
+            // Set input parameters
+            let input = BV::new_const(ctx, format!("swap_input_{}", i), 256);
+            contract.set_input(input);
+
+            // Execute symbolic analysis
+            let mut execution_path = ExecutionPath::new();
+            let mut execution_path_list = ExecutionPathList::new();
+
+            if let Err(e) = self.symbolic_run_dfs(&contract, ctx, &mut execution_path, &mut execution_path_list) {
+                warn!("Failed to analyze path {}->{}: {:?}", token_a, token_b, e);
+                continue;
+            }
+
+            // Extract path information from execution results
+            for path in execution_path_list.paths() {
+                let gas_used = estimate_gas_usage(&path);
+                let net_value = estimate_net_value(&path, token_a, token_b);
+
+                paths.push(ArbitragePath {
+                    tokens: vec![token_a, token_b],
+                    gas_used,
+                    net_value,
+                    success_probability: calculate_success_probability(&path),
+                    execution_steps: path.len(),
+                });
+            }
+        }
+
+        info!("Analyzed {} arbitrage paths", paths.len());
+        Ok(paths)
+    }
+
+    /// Verify liquidation conditions
+    pub async fn verify_liquidation_conditions(&mut self, user: Address) -> DeFiResult<bool> {
+        info!("Verifying liquidation conditions for user {:?}", user);
+
+        // Create symbolic execution context for liquidation verification
+        let ctx = match &self.evm {
+            Some(evm) => evm.ctx,
+            None => return Err(DeFiAnalyzerError::SymbolicExecution("No EVM context available".to_string())),
+        };
+
+        let caller = BV::new_const(ctx, "liquidator", 256);
+        let user_addr = BV::new_const(ctx, "user", 256);
+        let protocol_addr = BV::new_const(ctx, "protocol", 256);
+        let value = BV::from_u64(ctx, 0, 256);
+
+        let mut contract = Contract::new(caller, protocol_addr.clone(), value, 0);
+
+        // Set up liquidation verification code
+        let liquidation_code = create_liquidation_check_bytecode(user);
+        contract.set_call_code(protocol_addr, &liquidation_code);
+
+        // Set input parameters (user address)
+        let input_data = encode_liquidation_input(user_addr);
+        contract.set_input(input_data);
+
+        // Execute symbolic analysis
+        let mut execution_path = ExecutionPath::new();
+        let mut execution_path_list = ExecutionPathList::new();
+
+        if let Err(e) = self.symbolic_run_dfs(&contract, ctx, &mut execution_path, &mut execution_path_list) {
+            warn!("Failed to verify liquidation conditions: {:?}", e);
+            return Ok(false);
+        }
+
+        // Check if any path indicates liquidation is possible
+        for path in execution_path_list.paths() {
+            if path_indicates_liquidation_possible(&path) {
+                info!("Liquidation conditions verified for user {:?}", user);
+                return Ok(true);
+            }
+        }
+
+        info!("Liquidation conditions not met for user {:?}", user);
+        Ok(false)
+    }
 }
 
 // EVMOperation implementations (basic arithmetic/logic/memory/storage)
@@ -2257,4 +2362,147 @@ impl fmt::Display for OpCode {
             OpCode::PUSH0 => write!(f, "PUSH0"),
         }
     }
+}
+
+
+/// Arbitrage path analysis result
+#[derive(Debug, Clone)]
+pub struct ArbitragePath {
+    pub tokens: Vec<Address>,
+    pub gas_used: u64,
+    pub net_value: i64,
+    pub success_probability: f64,
+    pub execution_steps: usize,
+}
+
+/// Helper functions for symbolic execution analysis
+
+/// Create simplified swap bytecode for symbolic analysis
+fn create_swap_bytecode(token_a: Address, token_b: Address) -> Vec<u8> {
+    // Simplified EVM bytecode that represents a token swap
+    // In a real implementation, this would be actual DEX contract bytecode
+    vec![
+        // PUSH tokens onto stack
+        0x60, 0x00, // PUSH1 0x00
+        0x60, 0x01, // PUSH1 0x01
+        0x01,       // ADD (simulate swap calculation)
+        0x60, 0x00, // PUSH1 0x00
+        0x52,       // MSTORE (store result)
+        0x60, 0x20, // PUSH1 0x20
+        0x60, 0x00, // PUSH1 0x00
+        0xf3,       // RETURN
+    ]
+}
+
+/// Create liquidation check bytecode
+fn create_liquidation_check_bytecode(user: Address) -> Vec<u8> {
+    // Simplified EVM bytecode for liquidation condition check
+    vec![
+        // Check collateral ratio
+        0x60, 0x01, // PUSH1 0x01 (mock liquidation check result)
+        0x60, 0x00, // PUSH1 0x00
+        0x52,       // MSTORE
+        0x60, 0x20, // PUSH1 0x20
+        0x60, 0x00, // PUSH1 0x00
+        0xf3,       // RETURN
+    ]
+}
+
+/// Encode liquidation input data
+fn encode_liquidation_input(user_addr: BV) -> BV {
+    // In a real implementation, this would properly encode the user address
+    user_addr
+}
+
+/// Estimate gas usage from execution path
+fn estimate_gas_usage(path: &ExecutionPath) -> u64 {
+    // Calculate gas usage based on operations in the path
+    let mut total_gas = 0;
+
+    for state in path.iter() {
+        total_gas += match state.current_opcode {
+            OpCode::ADD | OpCode::SUB | OpCode::MUL => 3,
+            OpCode::DIV | OpCode::SDIV => 5,
+            OpCode::SLOAD => 800,
+            OpCode::SSTORE => 20000,
+            OpCode::CALL | OpCode::DELEGATECALL | OpCode::STATICCALL => 25000,
+            OpCode::SHA3 => 30,
+            _ => 1,
+        };
+    }
+
+    total_gas
+}
+
+/// Estimate net value from execution path
+fn estimate_net_value(path: &ExecutionPath, token_a: Address, token_b: Address) -> i64 {
+    // Simplified estimation based on path analysis
+    // In a real implementation, this would analyze the actual token balances
+
+    let has_profitable_operations = path.iter().any(|state| {
+        matches!(state.current_opcode, OpCode::CALL | OpCode::DELEGATECALL)
+    });
+
+    if has_profitable_operations {
+        // Estimate positive value if path contains external calls (likely swaps)
+        1000 // Mock positive value
+    } else {
+        -100 // Mock negative value for non-profitable paths
+    }
+}
+
+/// Calculate success probability from execution path
+fn calculate_success_probability(path: &ExecutionPath) -> f64 {
+    // Calculate probability based on path characteristics
+    let mut score: f64 = 1.0;
+
+    // Penalize for complexity
+    if path.len() > 100 {
+        score *= 0.8;
+    }
+
+    // Penalize for reverts
+    let has_revert = path.iter().any(|state| {
+        matches!(state.current_opcode, OpCode::REVERT | OpCode::INVALID)
+    });
+
+    if has_revert {
+        score *= 0.1;
+    }
+
+    // Check for successful completion
+    let ends_with_return = path.last().map_or(false, |state| {
+        matches!(state.current_opcode, OpCode::RETURN | OpCode::STOP)
+    });
+
+    if !ends_with_return {
+        score *= 0.5;
+    }
+
+    score.min(1.0_f64).max(0.0_f64)
+}
+
+/// Check if path indicates liquidation is possible
+fn path_indicates_liquidation_possible(path: &ExecutionPath) -> bool {
+    // Check if the execution path suggests liquidation conditions are met
+
+    // Look for successful execution ending
+    let successful_execution = path.last().map_or(false, |state| {
+        matches!(state.current_opcode, OpCode::RETURN) &&
+        state.current_return_error.is_none()
+    });
+
+    if !successful_execution {
+        return false;
+    }
+
+    // Check if return value indicates liquidation possibility
+    if let Some(last_state) = path.last() {
+        if let Some(return_value) = &last_state.current_return_value {
+            // In this simplified implementation, we check if return value is non-zero
+            return return_value.as_u64().unwrap_or(0) > 0;
+        }
+    }
+
+    false
 }

@@ -13,6 +13,9 @@ mev-arbitrage-defense = { path = "./defense", optional = true }
 # Artemis 核心
 artemis-core = { path = "../../core/artemis-core" }
 
+# DeFi analyzer (used by legacy hybrid engine)
+defi-analyzer = { path = "../defi-analyzer", optional = true }
+
 # Core dependencies
 async-trait = "0.1.64"
 anyhow = "1.0.70"
@@ -40,7 +43,7 @@ crossbeam = "0.8"
 
 # Utilities
 hex = "0.4"
-uuid = { version = "1.6", features = ["v4"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
 chrono = "0.4.42"
 toml = "0.8"
 
@@ -53,3 +56,6 @@ full = [
     "mev-arbitrage-revm",
     "mev-arbitrage-defense",
 ]
+# Legacy feature: enables old implementation modules for feature extraction and migration
+# Note: These modules have known compilation issues being resolved incrementally
+legacy = ["defi-analyzer"]

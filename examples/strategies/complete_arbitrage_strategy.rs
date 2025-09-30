@@ -9,24 +9,24 @@
 
 use anyhow::Result;
 use alloy_primitives::{Address, U256, Bytes};
-use alloy_provider::{Provider};
-use alloy_rpc_types_eth::{Block, Transaction, Log};
+// use alloy_provider::{Provider};
+use alloy_rpc_types_eth::{transaction::TransactionRequest};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tracing::{info, debug, error};
 use tokio::time::sleep;
 
 // 导入Artemis核心模块
-use mev_arbitrage_symbolic::{
-    SEVM
-};
+// use mev_arbitrage_symbolic::{
+//     SEVM
+// };
 use mev_arbitrage_revm::{
     ConcreteExecutionValidator,
     ConcreteExecutionResult, ExecutionResult,
-    ContractBehavior, BehaviorPattern, ArbitrageOpportunity,
-    StrategyCandidate, RiskLevel, PathExplorer
+    ContractBehavior, BehaviorPattern,
+    StrategyCandidate, RiskLevel, PathExplorer, DeFiAction
 };
-use z3::{Context, Config, Solver, ast::{BV}};
+use z3::{Context, Config, Solver, ast::{BV, Ast}};
 
 /// 完整的套利策略系统
 pub struct CompleteArbitrageStrategy {
@@ -79,14 +79,10 @@ pub enum PoolType {
     Curve,
 }
 
-/// 符号执行引擎
+/// 符号执行引擎（简化版本）
 pub struct SymbolicExecutionEngine {
-    /// Z3上下文
-    z3_ctx: Context,
-    /// SEVM实例
-    sevm: SEVM<'static>,
     /// 路径探索器
-    path_explorer: PathExplorer<'static>,
+    path_explorer: PathExplorer,
     /// 合约行为缓存
     behavior_cache: HashMap<Address, ContractBehavior>,
 }
@@ -278,25 +274,27 @@ impl CompleteArbitrageStrategy {
     }
     
     /// 使用Z3优化策略
-    async fn optimize_strategies_with_z3(&self, behaviors: &[ContractBehavior], signal: &PriceSignal) -> Result<Vec<StrategyCandidate>> {
+    async fn optimize_strategies_with_z3(&self, _behaviors: &[ContractBehavior], signal: &PriceSignal) -> Result<Vec<StrategyCandidate>> {
         debug!("⚡ 使用Z3优化策略参数");
-        
-        let solver = Solver::new(&self.symbolic_engine.z3_ctx);
-        
+
+        // 创建临时Z3上下文用于优化
+        let z3_ctx = Context::new(&Config::new());
+        let solver = Solver::new(&z3_ctx);
+
         // 定义决策变量
-        let investment = BV::new_const(&self.symbolic_engine.z3_ctx, "investment", 256);
-        let slippage = BV::new_const(&self.symbolic_engine.z3_ctx, "slippage", 256);
-        
+        let investment = BV::new_const(&z3_ctx, "investment", 256);
+        let _slippage = BV::new_const(&z3_ctx, "slippage", 256);
+
         // 添加约束
-        let min_investment = BV::from_u64(&self.symbolic_engine.z3_ctx, 1_000_000_000_000_000u64, 256);
-        let max_investment = BV::from_u64(&self.symbolic_engine.z3_ctx, self.config.max_investment.as_limbs()[0], 256);
+        let min_investment = BV::from_u64(&z3_ctx, 1_000_000_000_000_000u64, 256);
+        let max_investment = BV::from_u64(&z3_ctx, self.config.max_investment.as_limbs()[0], 256);
         
         solver.assert(&investment.bvuge(&min_investment));
         solver.assert(&investment.bvule(&max_investment));
         
         // 利润约束
         let expected_profit = self.calculate_expected_profit(signal, &investment)?;
-        let min_profit = BV::from_u64(&self.symbolic_engine.z3_ctx, self.config.min_profit_threshold.as_limbs()[0], 256);
+        let min_profit = BV::from_u64(&z3_ctx, self.config.min_profit_threshold.as_limbs()[0], 256);
         solver.assert(&expected_profit.bvuge(&min_profit));
         
         // 求解
@@ -319,12 +317,14 @@ impl CompleteArbitrageStrategy {
     }
     
     /// 计算预期利润
-    fn calculate_expected_profit<'a>(&self, signal: &PriceSignal, investment: &BV<'a>) -> Result<BV<'a>> {
+    fn calculate_expected_profit<'a>(&'a self, signal: &PriceSignal, investment: &BV<'a>) -> Result<BV<'a>> {
         // 简化的利润计算: profit = investment * price_difference
-        let price_diff_bv = BV::from_u64(&self.symbolic_engine.z3_ctx, 
+        // 获取investment的上下文
+        let ctx = investment.get_ctx();
+        let price_diff_bv = BV::from_u64(ctx,
             (signal.price_difference * 1000.0) as u64, 256);
-        let thousand = BV::from_u64(&self.symbolic_engine.z3_ctx, 1000, 256);
-        
+        let thousand = BV::from_u64(ctx, 1000, 256);
+
         Ok(investment.bvmul(&price_diff_bv).bvudiv(&thousand))
     }
     
@@ -363,17 +363,18 @@ impl CompleteArbitrageStrategy {
     }
     
     /// 从策略构建交易
-    fn build_transactions_from_strategy(&self, strategy: &StrategyCandidate, validation: &ConcreteExecutionResult) -> Result<Vec<Transaction>> {
+    fn build_transactions_from_strategy(&self, strategy: &StrategyCandidate, _validation: &ConcreteExecutionResult) -> Result<Vec<TransactionRequest>> {
         let mut transactions = Vec::new();
         
         for action in &strategy.actions {
             match action {
-                DeFiAction::Swap { from, to, amount } => {
-                    transactions.push(Transaction {
-                        to: Address::from(*to),
-                        data: Bytes::new(),
-                        value: amount.clone(),
-                        gas_limit: strategy.gas_estimate,
+                DeFiAction::Swap { from: _, to, amount } => {
+                    transactions.push(TransactionRequest {
+                        to: Some(Address::from(*to).into()),
+                        input: alloy_rpc_types_eth::transaction::TransactionInput::new(Bytes::new()),
+                        value: Some(*amount),
+                        gas: Some(strategy.gas_estimate),
+                        ..Default::default()
                     });
                 },
                 _ => {}
@@ -426,17 +427,11 @@ impl PriceMonitor {
 
 impl SymbolicExecutionEngine {
     async fn new() -> Result<Self> {
-        let z3_config = Config::new();
-        let z3_ctx = Context::new(&z3_config);
-        
-        // 注意: 这里需要处理生命周期问题
-        // 在实际实现中，可能需要使用不同的架构
-        let sevm = SEVM::new(&z3_ctx);
-        let path_explorer = PathExplorer::new(&z3_ctx);
-        
+        let path_explorer = PathExplorer {
+            config: "default".to_string(),
+        };
+
         Ok(Self {
-            z3_ctx,
-            sevm,
             path_explorer,
             behavior_cache: HashMap::new(),
         })
@@ -472,7 +467,7 @@ impl StrategyExecutor {
         })
     }
     
-    async fn submit_transactions(&self, transactions: Vec<Transaction>) -> Result<ExecutionResult> {
+    async fn submit_transactions(&self, transactions: Vec<TransactionRequest>) -> Result<ExecutionResult> {
         // 模拟交易提交
         debug!("📤 提交 {} 个交易", transactions.len());
         
@@ -494,17 +489,10 @@ pub struct PriceSignal {
     pub timestamp: Instant,
 }
 
-/// DeFi动作
-#[derive(Debug, Clone)]
-pub enum DeFiAction {
-    Swap { from: Address, to: Address, amount: U256 },
-    AddLiquidity { token_a: Address, token_b: Address, amount_a: U256, amount_b: U256 },
-    RemoveLiquidity { token_a: Address, token_b: Address, amount: U256 },
-}
 
-/// 交易
+/// 自定义交易结构
 #[derive(Debug, Clone)]
-pub struct Transaction {
+pub struct CustomTransaction {
     pub to: Address,
     pub data: Bytes,
     pub value: U256,

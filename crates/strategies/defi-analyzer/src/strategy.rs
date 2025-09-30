@@ -173,30 +173,50 @@ impl DeFiAnalyzerStrategy {
     /// Process a single analysis event
     async fn process_analysis_event(&mut self, event: AnalysisEvent) -> Result<Vec<AnalysisAction>> {
         let start_time = std::time::Instant::now();
-        
-        info!("Processing analysis event: {:?}", event.event_type);
-        
+
+        info!("Processing analysis event: {:?} at block {} for contract {:?}",
+              event.event_type, event.block_number, event.contract_address);
+
+        // Use all event fields for comprehensive analysis
+        debug!("Event details - kind: {}, timestamp: {}, metadata: {:?}",
+               event.event_kind, event.timestamp, event.metadata);
+
         // First run standard analysis
-        let analysis_result = self.analyzer.analyze_event(&event).await?;
+        let mut analysis_result = self.analyzer.analyze_event(&event).await?;
         
         // Then run JIT strategy discovery (includes negative cycle arbitrage)
         let defi_actions = self.extract_defi_actions_from_event(&event)?;
         let jit_strategy = self.jit_engine.jit_strategy_discovery(event.block_number, &defi_actions).await.unwrap_or(None);
-        
+
         // Create additional actions from JIT strategy if profitable
         let mut additional_actions = Vec::new();
         if let Some(strategy) = jit_strategy {
             info!("JIT strategy discovered: {} ({:?})", strategy.net_profit, strategy.strategy_type);
-            
+
             for tx in &strategy.transactions {
                 additional_actions.push(AnalysisAction {
                     action_id: format!("jit_{}_{}", strategy.strategy_type == crate::jit_strategy_discovery::StrategyType::ARB, event.block_number),
                     action_type: crate::types::ActionType::ArbitrageExecution,
+                    contract_address: event.contract_address,
                     target_address: tx.to.into(),
+                    parameters: crate::types::AnalysisParameters {
+                        abi_json: None,
+                        function_name: Some("jit_arbitrage".to_string()),
+                        depth: 5,
+                        timeout_seconds: 30,
+                        config: {
+                            let mut config = HashMap::new();
+                            config.insert("strategy_type".to_string(), format!("{:?}", strategy.strategy_type));
+                            config.insert("event_kind".to_string(), event.event_kind.clone());
+                            config.insert("tx_hash".to_string(), hex::encode(&event.transaction_hash));
+                            config
+                        },
+                    },
+                    priority: 90, // High priority for JIT strategies
                     calldata: tx.data.to_vec(),
                     value: tx.value,
                     gas_limit: tx.gas_limit,
-                    gas_price: 20_000_000_000,
+                    gas_price: U256::from(20_000_000_000u64),
                     nonce: 0,
                     chain_id: 1,
                     expected_profit: strategy.revenue,
@@ -204,7 +224,19 @@ impl DeFiAnalyzerStrategy {
                     target_block: event.block_number + 1,
                     min_timestamp: event.timestamp,
                     max_timestamp: event.timestamp + 12,
-                    metadata: HashMap::new(),
+                    metadata: {
+                        let mut meta = HashMap::new();
+                        meta.insert("source_event_kind".to_string(), event.event_kind.clone());
+                        meta.insert("source_block".to_string(), event.block_number.to_string());
+                        meta.insert("source_timestamp".to_string(), event.timestamp.to_string());
+                        meta.insert("jit_strategy_type".to_string(), format!("{:?}", strategy.strategy_type));
+                        meta.insert("expected_profit".to_string(), strategy.revenue.to_string());
+                        // Include original event metadata
+                        for (key, value) in &event.metadata {
+                            meta.insert(format!("event_{}", key), value.clone());
+                        }
+                        meta
+                    },
                 });
             }
         }
@@ -225,17 +257,38 @@ impl DeFiAnalyzerStrategy {
         //     }
         // }
         
-        // Update statistics
+        // Update statistics with detailed tracking
         let analysis_time = start_time.elapsed().as_millis() as u64;
         self.stats.events_processed += 1;
         self.stats.total_analysis_time_ms += analysis_time;
         self.stats.actions_generated += actions.len() as u64;
-        
+
         if !combined_result.results.arbitrage_opportunities.is_empty() {
             self.stats.opportunities_found += combined_result.results.arbitrage_opportunities.len() as u64;
         }
 
-        info!("Analysis completed in {}ms, generated {} actions", analysis_time, actions.len());
+        // Log comprehensive analysis results
+        info!("Analysis completed in {}ms for event kind '{}' at block {}, generated {} actions",
+              analysis_time, event.event_kind, event.block_number, actions.len());
+
+        if !combined_result.results.arbitrage_opportunities.is_empty() {
+            info!("Found {} arbitrage opportunities for contract {:?}",
+                  combined_result.results.arbitrage_opportunities.len(), event.contract_address);
+        }
+
+        if !combined_result.results.inconsistencies.is_empty() {
+            warn!("Found {} inconsistencies in contract {:?}: {:?}",
+                  combined_result.results.inconsistencies.len(),
+                  event.contract_address,
+                  combined_result.results.inconsistencies.iter()
+                      .map(|i| format!("{:?}", i.inconsistency_type))
+                      .collect::<Vec<_>>());
+        }
+
+        // Log event data usage for debugging
+        debug!("Processed event with {} bytes of event data, tx hash: {}",
+               event.event_data.len(),
+               hex::encode(&event.transaction_hash));
         
         Ok(actions)
     }
@@ -243,17 +296,20 @@ impl DeFiAnalyzerStrategy {
     /// Extract DeFi actions from analysis event
     fn extract_defi_actions_from_event(&self, event: &AnalysisEvent) -> Result<Vec<DeFiAction>> {
         let mut actions = Vec::new();
-        
+
+        // Use tx_data first, fallback to transaction_data for compatibility
+        let tx_data = event.tx_data.as_ref().or(event.transaction_data.as_ref());
+
         // Parse transaction data to extract DeFi actions
-        if let Some(tx_data) = &event.transaction_data {
+        if let Some(tx_data) = tx_data {
             if tx_data.len() >= 4 {
                 let selector = [
                     tx_data[0],
-                    tx_data[1], 
+                    tx_data[1],
                     tx_data[2],
                     tx_data[3]
                 ];
-            
+
             // Common DeFi function selectors
             let defi_action = match selector {
                 [0xa9, 0x05, 0x9c, 0xbb] => Some(DeFiAction {
@@ -311,6 +367,7 @@ impl DeFiAnalyzerStrategy {
                 let action = AnalysisAction {
                     action_type: crate::types::ActionType::SymbolicExecution,
                     contract_address: result.contract_address,
+                    target_address: result.contract_address, // 使用target_address字段
                     parameters: crate::types::AnalysisParameters {
                         abi_json: None,
                         function_name: None,
@@ -319,6 +376,24 @@ impl DeFiAnalyzerStrategy {
                         config: std::collections::HashMap::new(),
                     },
                     priority: self.calculate_priority(opportunity),
+                    action_id: format!("arbitrage_{}_{}", opportunity.opportunity_id, chrono::Utc::now().timestamp()),
+                    calldata: vec![], // 实际应该根据机会类型构建calldata
+                    value: opportunity.expected_profit,
+                    gas_limit: U256::from(opportunity.required_gas),
+                    gas_price: U256::from(20_000_000_000u64), // 20 gwei
+                    nonce: 0, // 应该从实际状态获取
+                    chain_id: 1, // 以太坊主网
+                    target_block: 0, // 应该设置为下一个区块
+                    risk_level: opportunity.risk_level.clone(),
+                    expected_profit: opportunity.expected_profit,
+                    min_timestamp: chrono::Utc::now().timestamp() as u64,
+                    max_timestamp: (chrono::Utc::now().timestamp() + 60) as u64, // 60秒有效期
+                    metadata: {
+                        let mut meta = std::collections::HashMap::new();
+                        meta.insert("opportunity_id".to_string(), opportunity.opportunity_id.clone());
+                        meta.insert("strategy_type".to_string(), "arbitrage".to_string());
+                        meta
+                    },
                 };
                 actions.push(action);
             }
@@ -330,6 +405,7 @@ impl DeFiAnalyzerStrategy {
                 let action = AnalysisAction {
                     action_type: crate::types::ActionType::GenerateReport,
                     contract_address: result.contract_address,
+                    target_address: result.contract_address,
                     parameters: crate::types::AnalysisParameters {
                         abi_json: None,
                         function_name: None,
@@ -338,6 +414,35 @@ impl DeFiAnalyzerStrategy {
                         config: std::collections::HashMap::new(),
                     },
                     priority: 80, // High priority for inconsistencies
+                    action_id: format!("report_{}_{}", inconsistency.inconsistency_type.to_string(), chrono::Utc::now().timestamp()),
+                    calldata: vec![], // 报告类型不需要calldata
+                    value: U256::ZERO,
+                    gas_limit: U256::ZERO, // 报告不需要gas
+                    gas_price: U256::ZERO,
+                    nonce: 0,
+                    chain_id: 1,
+                    target_block: 0,
+                    risk_level: match inconsistency.severity {
+                        crate::types::SeverityLevel::Critical => crate::types::RiskLevel::Critical,
+                        crate::types::SeverityLevel::High => crate::types::RiskLevel::High,
+                        crate::types::SeverityLevel::Medium => crate::types::RiskLevel::Medium,
+                        crate::types::SeverityLevel::Low => crate::types::RiskLevel::Low,
+                    },
+                    expected_profit: U256::ZERO,
+                    min_timestamp: chrono::Utc::now().timestamp() as u64,
+                    max_timestamp: (chrono::Utc::now().timestamp() + 3600) as u64, // 1小时有效期
+                    metadata: {
+                        let mut meta = std::collections::HashMap::new();
+                        meta.insert("inconsistency_type".to_string(), inconsistency.inconsistency_type.to_string());
+                        meta.insert("description".to_string(), inconsistency.description.clone());
+                        if let Some(location) = &inconsistency.location {
+                            meta.insert("location".to_string(), location.clone());
+                        }
+                        if let Some(fix) = &inconsistency.suggested_fix {
+                            meta.insert("suggested_fix".to_string(), fix.clone());
+                        }
+                        meta
+                    },
                 };
                 actions.push(action);
             }

@@ -47,7 +47,15 @@ pub struct NegativeCycleConfig {
 pub struct StateSnapshot {
     /// Block number
     pub block_number: u64,
-    /// Token reserves in liquidity pools
+    /// Timestamp
+    pub timestamp: u64,
+    /// Protocol states (for compatibility)
+    pub protocol_states: HashMap<String, String>,
+    /// Pool reserves (compatible with both formats)
+    pub pool_reserves: HashMap<Address, (U256, U256)>,
+    /// Token prices
+    pub token_prices: HashMap<String, f64>,
+    /// Token reserves in liquidity pools (original format)
     pub token_reserves: HashMap<PoolId, (U256, U256)>,
     /// Spot prices between token pairs
     pub spot_prices: HashMap<(TokenId, TokenId), f64>,
@@ -177,6 +185,138 @@ impl NegativeCycleArbitrageEngine {
             trading_graph: TradingGraph::new(),
             config,
         }
+    }
+
+    /// Find arbitrage cycles (interface compatibility method)
+    pub async fn find_arbitrage_cycles(&mut self, state_snapshot: &StateSnapshot) -> anyhow::Result<Vec<ArbitrageCycle>> {
+        info!("Finding arbitrage cycles for state at block {}", state_snapshot.block_number);
+
+        // Update internal state
+        self.state_snapshot = state_snapshot.clone();
+
+        // Build trading graph
+        let graph = self.build_graph(state_snapshot)?;
+        self.trading_graph = graph.clone();
+
+        let mut cycles = Vec::new();
+        let mut iteration = 0;
+        let max_iterations = self.config.max_cycles_per_iteration;
+
+        // Find multiple negative cycles
+        while self.has_negative_cycle(&graph)? && iteration < max_iterations {
+            if let Some(cycle) = self.get_negative_cycle(&graph)? {
+                debug!("Found arbitrage cycle: {:?}", cycle.path);
+
+                // Validate cycle profitability
+                if cycle.expected_profit > self.config.target_revenue {
+                    cycles.push(cycle);
+                }
+
+                iteration += 1;
+            } else {
+                break;
+            }
+        }
+
+        info!("Found {} arbitrage cycles", cycles.len());
+        Ok(cycles)
+    }
+
+    /// Analyze arbitrage opportunity from event
+    pub async fn analyze_arbitrage_opportunity(&mut self, event: &AnalysisEvent) -> DeFiResult<Vec<ArbitrageOpportunity>> {
+        debug!("Analyzing arbitrage opportunity from event: {:?}", event.event_type);
+
+        // Convert event to state snapshot
+        let state_snapshot = StateSnapshot::from_analysis_event(event);
+
+        // Find cycles
+        let cycles = self.find_arbitrage_cycles(&state_snapshot).await
+            .map_err(|e| DeFiAnalyzerError::SymbolicExecution(e.to_string()))?;
+
+        // Convert cycles to arbitrage opportunities
+        let mut opportunities = Vec::new();
+        for cycle in cycles {
+            let opportunity = ArbitrageOpportunity {
+                opportunity_id: format!("arb_{}", uuid::Uuid::new_v4()),
+                path: cycle.path.clone(),
+                expected_profit: cycle.expected_profit,
+                required_gas: self.estimate_gas_for_cycle(&cycle),
+                risk_level: self.assess_cycle_risk(&cycle),
+                confidence_score: self.calculate_confidence(&cycle),
+                time_sensitive: true,
+                execution_deadline: std::time::SystemTime::now() + std::time::Duration::from_secs(30),
+                metadata: {
+                    let mut meta = std::collections::HashMap::new();
+                    meta.insert("total_weight".to_string(), cycle.total_weight.to_string());
+                    meta.insert("pool_count".to_string(), cycle.pools.len().to_string());
+                    meta.insert("source_event".to_string(), event.event_type.clone());
+                    meta
+                },
+            };
+            opportunities.push(opportunity);
+        }
+
+        Ok(opportunities)
+    }
+
+    /// Estimate gas cost for a cycle
+    fn estimate_gas_for_cycle(&self, cycle: &ArbitrageCycle) -> u64 {
+        // Base gas cost per swap + overhead
+        let base_gas_per_swap = 150_000u64;
+        let overhead_gas = 50_000u64;
+
+        let total_gas = base_gas_per_swap * cycle.pools.len() as u64 + overhead_gas;
+
+        // Add extra gas for complex operations
+        if cycle.path.len() > 4 {
+            total_gas + 100_000
+        } else {
+            total_gas
+        }
+    }
+
+    /// Assess risk level for a cycle
+    fn assess_cycle_risk(&self, cycle: &ArbitrageCycle) -> RiskLevel {
+        let mut risk_score = 0.0;
+
+        // Risk increases with path length
+        risk_score += (cycle.path.len() as f64 - 2.0) * 0.1;
+
+        // Risk increases with negative total weight (higher potential slippage)
+        if cycle.total_weight < -0.1 {
+            risk_score += 0.2;
+        }
+
+        // Risk increases with low expected profit
+        let profit_eth = cycle.expected_profit.as_limbs()[0] as f64 / 1e18;
+        if profit_eth < 0.01 {
+            risk_score += 0.3;
+        }
+
+        match risk_score {
+            x if x < 0.3 => RiskLevel::Low,
+            x if x < 0.6 => RiskLevel::Medium,
+            x if x < 0.8 => RiskLevel::High,
+            _ => RiskLevel::Critical,
+        }
+    }
+
+    /// Calculate confidence score for a cycle
+    fn calculate_confidence(&self, cycle: &ArbitrageCycle) -> f64 {
+        let mut confidence = 1.0;
+
+        // Reduce confidence for longer paths
+        confidence -= (cycle.path.len() as f64 - 2.0) * 0.05;
+
+        // Reduce confidence for high absolute total weight
+        confidence -= cycle.total_weight.abs() * 0.1;
+
+        // Reduce confidence if no pools found
+        if cycle.pools.is_empty() {
+            confidence -= 0.5;
+        }
+
+        confidence.max(0.0).min(1.0)
     }
 
     /// Execute the main ARB_NegativeCycle_Trading algorithm
@@ -659,6 +799,10 @@ impl StateSnapshot {
     pub fn new() -> Self {
         Self {
             block_number: 0,
+            timestamp: 0,
+            protocol_states: HashMap::new(),
+            pool_reserves: HashMap::new(),
+            token_prices: HashMap::new(),
             token_reserves: HashMap::new(),
             spot_prices: HashMap::new(),
             pools: HashMap::new(),
@@ -670,10 +814,57 @@ impl StateSnapshot {
     pub fn from_analysis_event(event: &AnalysisEvent) -> Self {
         let mut snapshot = Self::new();
         snapshot.block_number = event.block_number;
-        
-        // Parse event data to populate snapshot
-        // This would extract pool and token information from the event
-        
+        snapshot.timestamp = event.timestamp;
+
+        // Add basic token info if available
+        if let Some(contract_addr) = event.contract_address {
+            // Create synthetic pool info for the contract
+            let pool_info = PoolInfo {
+                address: contract_addr,
+                protocol: "unknown".to_string(),
+                token_a: "token_a".to_string(),
+                token_b: "token_b".to_string(),
+                fee: 30, // 0.3% default fee
+                pool_data: PoolData::UniswapV2 {
+                    reserve_a: U256::from(1000000000000000000u64), // 1 ETH
+                    reserve_b: U256::from(1000000000000000000u64), // 1 ETH
+                },
+            };
+
+            let pool_id = format!("pool_{}", contract_addr);
+            snapshot.pools.insert(pool_id.clone(), pool_info);
+
+            // Add token info
+            let token_info_a = TokenInfo {
+                address: contract_addr,
+                symbol: "TOKEN_A".to_string(),
+                decimals: 18,
+            };
+            let token_info_b = TokenInfo {
+                address: contract_addr,
+                symbol: "TOKEN_B".to_string(),
+                decimals: 18,
+            };
+
+            snapshot.tokens.insert("token_a".to_string(), token_info_a);
+            snapshot.tokens.insert("token_b".to_string(), token_info_b);
+
+            // Add reserves
+            snapshot.token_reserves.insert(pool_id, (U256::from(1000000000000000000u64), U256::from(1000000000000000000u64)));
+            snapshot.pool_reserves.insert(contract_addr, (U256::from(1000000000000000000u64), U256::from(1000000000000000000u64)));
+
+            // Add spot prices
+            snapshot.spot_prices.insert(("token_a".to_string(), "token_b".to_string()), 1.0);
+            snapshot.spot_prices.insert(("token_b".to_string(), "token_a".to_string()), 1.0);
+            snapshot.token_prices.insert("token_a".to_string(), 1.0);
+            snapshot.token_prices.insert("token_b".to_string(), 1.0);
+        }
+
+        // Copy metadata to protocol states
+        for (key, value) in &event.metadata {
+            snapshot.protocol_states.insert(key.clone(), value.clone());
+        }
+
         snapshot
     }
 }

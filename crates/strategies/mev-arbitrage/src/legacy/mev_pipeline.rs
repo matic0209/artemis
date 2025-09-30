@@ -651,38 +651,98 @@ impl MEVPipeline {
 // 实现各个阶段的默认构造函数
 impl DetectionStage {
     fn new() -> Self {
-        // TODO: 实际实现中需要注入具体的检测器
-        todo!("Implement DetectionStage::new()")
+        // 实际实现中会注入具体的检测器
+        Self {
+            graph_detector: Arc::new(NegativeCycleDetector::new()),
+            sandwich_detector: Arc::new(SandwichDetector::new()),
+            liquidation_detector: Arc::new(LiquidationDetector::new()),
+            arbitrage_detector: Arc::new(ArbitrageDetector::new()),
+        }
     }
 
-    async fn detect(&self, _event: &MEVEvent) -> Result<Vec<MEVOpportunity>, DetectionError> {
-        // TODO: 实际检测逻辑
-        Ok(Vec::new())
+    async fn detect(&self, event: &MEVEvent) -> Result<Vec<MEVOpportunity>, DetectionError> {
+        let mut opportunities = Vec::new();
+
+        // 根据事件类型选择合适的检测器
+        match event {
+            MEVEvent::PendingTransaction { .. } => {
+                // 使用三明治检测器
+                if let Ok(sandwich_opportunities) = self.sandwich_detector.detect(event).await {
+                    opportunities.extend(sandwich_opportunities);
+                }
+                // 使用套利检测器
+                if let Ok(arbitrage_opportunities) = self.arbitrage_detector.detect(event).await {
+                    opportunities.extend(arbitrage_opportunities);
+                }
+            },
+            MEVEvent::DexEvent { .. } => {
+                // 使用图论检测器
+                if let Ok(graph_opportunities) = self.graph_detector.detect(event).await {
+                    opportunities.extend(graph_opportunities);
+                }
+            },
+            MEVEvent::LiquidationEvent { .. } => {
+                // 使用清算检测器
+                if let Ok(liquidation_opportunities) = self.liquidation_detector.detect(event).await {
+                    opportunities.extend(liquidation_opportunities);
+                }
+            },
+            MEVEvent::NewBlock { .. } => {
+                // 使用所有检测器寻找机会
+                for detector in [&self.graph_detector, &self.arbitrage_detector] {
+                    if let Ok(block_opportunities) = detector.detect(event).await {
+                        opportunities.extend(block_opportunities);
+                    }
+                }
+            }
+        }
+
+        Ok(opportunities)
     }
 }
 
 impl Clone for DetectionStage {
     fn clone(&self) -> Self {
-        // TODO: 实现克隆
-        todo!("Implement DetectionStage::clone()")
+        Self {
+            graph_detector: Arc::clone(&self.graph_detector),
+            sandwich_detector: Arc::clone(&self.sandwich_detector),
+            liquidation_detector: Arc::clone(&self.liquidation_detector),
+            arbitrage_detector: Arc::clone(&self.arbitrage_detector),
+        }
     }
 }
 
 impl ValidationStage {
     fn new() -> Self {
-        // TODO: 实际实现中需要注入具体的验证器
-        todo!("Implement ValidationStage::new()")
+        Self {
+            symbolic_validator: Arc::new(SymbolicValidator::new()),
+            revm_validator: Arc::new(RevmValidator::new()),
+            composite_validator: Arc::new(CompositeValidator::new()),
+        }
     }
 
-    async fn validate(&self, _opportunity: &MEVOpportunity) -> Result<ValidationResult, ValidationError> {
-        // TODO: 实际验证逻辑
-        Ok(ValidationResult {
-            success: true,
-            confidence: 0.9,
-            gas_estimate: 200000,
-            actual_profit: U256::from(1000000000000000000u64), // 1 ETH
-            error_message: None,
-        })
+    async fn validate(&self, opportunity: &MEVOpportunity) -> Result<ValidationResult, ValidationError> {
+        // 使用组合验证器进行验证
+        let composite_result = self.composite_validator.validate(opportunity).await?;
+
+        // 如果组合验证失败，尝试单独验证
+        if !composite_result.success {
+            // 尝试符号执行验证
+            if let Ok(symbolic_result) = self.symbolic_validator.validate(opportunity).await {
+                if symbolic_result.success {
+                    return Ok(symbolic_result);
+                }
+            }
+
+            // 尝试REVM验证
+            if let Ok(revm_result) = self.revm_validator.validate(opportunity).await {
+                if revm_result.success {
+                    return Ok(revm_result);
+                }
+            }
+        }
+
+        Ok(composite_result)
     }
 }
 
