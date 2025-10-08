@@ -107,7 +107,7 @@ pub struct ValidationResult {
 }
 
 /// Types of validation performed
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ValidationType {
     Symbolic,
     Concrete,
@@ -127,7 +127,7 @@ pub struct ValidationIssue {
 }
 
 /// Issue severity levels
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IssueSeverity {
     Critical,
     High,
@@ -249,6 +249,10 @@ pub struct ValidationContext {
     pub validation_types: Vec<ValidationType>,
     pub simulation_params: SimulationParams,
     pub risk_tolerance: RiskLevel,
+    // MEV优化：关键参数
+    pub gas_price: U256,
+    pub min_profit: U256,
+    pub slippage_tolerance: f64,
 }
 
 /// Optimization context
@@ -373,6 +377,17 @@ pub struct MarketData {
     pub volume_data: HashMap<Address, VolumeData>,
 }
 
+impl Default for MarketData {
+    fn default() -> Self {
+        Self {
+            token_prices: HashMap::new(),
+            pool_reserves: HashMap::new(),
+            gas_price_history: Vec::new(),
+            volume_data: HashMap::new(),
+        }
+    }
+}
+
 /// Pool reserves
 #[derive(Debug, Clone)]
 pub struct PoolReserves {
@@ -407,6 +422,18 @@ pub struct DetectionParams {
     pub min_confidence: f64,
     pub enable_flash_loans: bool,
     pub target_tokens: Vec<Address>,
+}
+
+impl Default for DetectionParams {
+    fn default() -> Self {
+        Self {
+            min_profit_wei: U256::from(100_000_000_000_000_000u64), // 0.1 ETH
+            max_gas_cost: U256::from(10_000_000_000_000_000u64),     // 0.01 ETH
+            min_confidence: 0.7,
+            enable_flash_loans: true,
+            target_tokens: Vec::new(),
+        }
+    }
 }
 
 /// Simulation parameters
@@ -532,5 +559,20 @@ pub enum OpportunityType {
         pool: Address,
         target_tx: String,
         liquidity_amount: U256,
+    },
+    /// Cross-protocol arbitrage (e.g., Uniswap V2 vs V3)
+    CrossProtocol {
+        protocol_a: String,
+        protocol_b: String,
+        token_path: Vec<Address>,
+    },
+    /// Lending protocol liquidation (Aave, Compound, etc.)
+    Liquidation {
+        protocol: String,
+        user: Address,
+        collateral_token: Address,
+        debt_token: Address,
+        debt_to_repay: U256,
+        collateral_to_seize: U256,
     },
 }

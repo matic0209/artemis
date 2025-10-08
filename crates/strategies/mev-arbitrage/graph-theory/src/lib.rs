@@ -149,6 +149,18 @@ pub struct StateSnapshot {
     pub tokens: HashMap<TokenId, TokenInfo>,
 }
 
+impl Default for StateSnapshot {
+    fn default() -> Self {
+        Self {
+            block_number: 0,
+            token_reserves: HashMap::new(),
+            spot_prices: HashMap::new(),
+            pools: HashMap::new(),
+            tokens: HashMap::new(),
+        }
+    }
+}
+
 /// Trading graph representation
 #[derive(Debug, Clone)]
 pub struct TradingGraph {

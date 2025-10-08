@@ -1,0 +1,178 @@
+# Local Node Configuration for MEV Arbitrage
+# 本地节点 MEV 套利配置文件
+
+[node]
+# Reth HTTP RPC endpoint
+http_url = "http://localhost:8545"
+
+# Reth WebSocket endpoint (用于实时监听)
+ws_url = "ws://localhost:8546"
+
+# Lighthouse Beacon API (可选)
+beacon_url = "http://localhost:5052"
+
+# 链 ID (1 = Mainnet, 5 = Goerli, 11155111 = Sepolia)
+chain_id = 1
+
+[wallet]
+# 私钥环境变量名 (推荐使用环境变量而非硬编码)
+private_key_env = "PRIVATE_KEY"
+
+# 执行账户地址 (替换为您的地址)
+address = "0x0000000000000000000000000000000000000000"
+
+[strategy]
+# 策略类型
+strategy_type = "unified_arbitrage"
+
+# 最小利润阈值 (ETH) - 只执行利润高于此值的套利
+min_profit_threshold = "0.01"
+
+# 最大投资金额 (ETH) - 单笔交易最多投入的ETH
+max_investment = "10.0"
+
+# 最大 Gas 价格 (Gwei) - 超过此值不执行
+max_gas_price = 100
+
+# Gas 价格乘数 (用于竞争) - 基础gas价格的倍数
+gas_price_multiplier = 1.2
+
+[detection]
+# 启用快速检测器 (2-hop/3-hop 套利)
+enable_fast_detector = true
+
+# 启用深度检测器 (负循环检测，更复杂但可能更有利可图)
+enable_deep_detector = false
+
+# 快速检测器详细配置
+[detection.fast]
+# 最小利润阈值 (Wei)
+min_profit_threshold = "10000000000000000"  # 0.01 ETH
+
+# 最大 Gas 成本 (gas units)
+max_gas_cost = 500000
+
+# 置信度阈值 (0.0-1.0)
+confidence_threshold = 0.8
+
+# 最大机会数 (同时跟踪的机会数量)
+max_opportunities = 100
+
+# 超时时间 (秒)
+timeout = 5
+
+# 深度检测器详细配置
+[detection.deep]
+# 最小利润阈值 (Wei) - 深度检测成本更高，要求更高利润
+min_profit_threshold = "20000000000000000"  # 0.02 ETH
+
+# 最大路径长度 (套利路径中的最大跳数)
+max_path_length = 5
+
+# 置信度阈值
+confidence_threshold = 0.7
+
+# 最大机会数
+max_opportunities = 50
+
+# 超时时间 (秒)
+timeout = 10
+
+[validation]
+# 启用符号验证 (Z3 符号执行)
+enable_symbolic = true
+
+# 启用 REVM 验证 (具体执行验证)
+enable_revm = true
+
+# 验证超时 (秒)
+validation_timeout = 10
+
+[execution]
+# 执行模式:
+# - "immediate": 立即执行 (适合快速套利)
+# - "delayed": 延迟执行 (等待更好的gas价格)
+# - "bundle": 打包执行 (Flashbots bundle)
+execution_mode = "immediate"
+
+# 滑点容忍度 (%)
+slippage_tolerance = 0.5
+
+# 最大重试次数
+max_retries = 3
+
+# 执行超时 (秒)
+execution_timeout = 30
+
+[monitoring]
+# 启用指标收集 (Prometheus格式)
+enable_metrics = true
+
+# 指标服务器端口
+metrics_port = 9090
+
+# 启用健康检查端点
+enable_health_check = true
+
+# 健康检查端口
+health_check_port = 8080
+
+# 日志级别: "trace" | "debug" | "info" | "warn" | "error"
+log_level = "info"
+
+# 日志格式: "json" | "pretty"
+log_format = "pretty"
+
+[pools]
+# 监控的 DEX 列表
+dexes = [
+    "uniswap_v2",
+    "uniswap_v3",
+    "sushiswap",
+]
+
+# Uniswap V2 合约地址
+uniswap_v2_router = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
+uniswap_v2_factory = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
+
+# Uniswap V3 合约地址
+uniswap_v3_router = "0xE592427A0AEce92De3Edee1F18E0157C05861564"
+uniswap_v3_factory = "0x1F98431c8aD98523631AE4a59f267346ea31F984"
+
+# SushiSwap 合约地址
+sushiswap_router = "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F"
+
+[tokens]
+# 监控的代币地址列表 (主流代币，流动性高)
+watched_tokens = [
+    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",  # WETH
+    "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",  # USDC
+    "0xdAC17F958D2ee523a2206206994597C13D831ec7",  # USDT
+    "0x6B175474E89094C44Da98b954EedeAC495271d0F",  # DAI
+    "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",  # WBTC
+]
+
+# 代币符号映射 (用于日志显示)
+[tokens.symbols]
+"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" = "WETH"
+"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" = "USDC"
+"0xdAC17F958D2ee523a2206206994597C13D831ec7" = "USDT"
+"0x6B175474E89094C44Da98b954EedeAC495271d0F" = "DAI"
+"0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599" = "WBTC"
+
+[safety]
+# 启用安全模式 (额外的安全检查)
+enable_safety_mode = true
+
+# 干运行模式 (不发送真实交易，仅模拟)
+# ⚠️ 强烈建议第一次运行时设为 true
+dry_run = true
+
+# 最大每日损失限制 (ETH)
+max_daily_loss = "1.0"
+
+# 最大单笔交易大小 (ETH)
+max_single_trade = "5.0"
+
+# 启用紧急停止 (出现问题时自动停止)
+enable_emergency_stop = true

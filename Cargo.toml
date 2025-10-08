@@ -17,16 +17,14 @@ members = [
     # 示例应用
     "examples/quick-start",
     "examples/alloy-quickstart",
-    "examples/defi-analyzer",
     "examples/mev-share-arb",
     "examples/strategies",
-    "examples/integration-demos/complete-mev-bot",
-    "examples/integration-demos/mev-arbitrage-bot",
-    "examples/integration-demos/sandwich-bot",
+    "examples/local-node-bot",
     
     # 二进制文件
     "bin/artemis",
     "bin/cli",
+    "bin/mev-arb-bot",
 ]
 
 resolver = "2"

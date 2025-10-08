@@ -1,0 +1,42 @@
+[package]
+name = "mev-arb-bot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Artemis core framework
+artemis-core = { path = "../../crates/core/artemis-core" }
+
+# MEV Arbitrage strategy (with full features)
+mev-arbitrage = { path = "../../crates/strategies/mev-arbitrage", features = ["full"] }
+
+# Alloy (Ethereum SDK)
+alloy-primitives = { workspace = true }
+alloy-provider = { workspace = true }
+alloy-transport-ws = "1.0.27"
+alloy-signer-local = { workspace = true }
+alloy-mev = "1.0.0"
+
+# Async runtime
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# CLI
+clap = { version = "4.0", features = ["derive"] }
+
+# Config
+toml = { workspace = true }
+serde = { workspace = true }
+
+# Metrics
+metrics = "0.22"
+metrics-exporter-prometheus = "0.15"
+hyper = { version = "0.14", features = ["full"] }

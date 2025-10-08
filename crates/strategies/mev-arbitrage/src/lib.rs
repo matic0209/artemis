@@ -10,28 +10,36 @@
 pub mod abstractions;
 #[cfg(feature = "full")]
 pub mod component_factory;
-#[cfg(feature = "full")]
-pub mod unified_arbitrage_manager;
 
-// Core systems
+// Organized modules (by functionality)
 #[cfg(feature = "full")]
-pub mod event_system;
+pub mod detectors;
 #[cfg(feature = "full")]
-pub mod gas_strategy;
+pub mod validators;
 #[cfg(feature = "full")]
-pub mod z3_optimizer;
+pub mod optimizers;
+#[cfg(feature = "full")]
+pub mod strategies;
+#[cfg(feature = "full")]
+pub mod execution;
+#[cfg(feature = "full")]
+pub mod coordination;
 
-// Active detection modules
+// Multi-strategy MEV modules (0x0e49-inspired)
 #[cfg(feature = "full")]
-pub mod enhanced_arbitrage_detector;
+pub mod simulators;
 #[cfg(feature = "full")]
-pub mod fast_arbitrage_detector;
+pub mod composers;
 
-// Legacy modules - preserved for feature migration
-// These modules contain valuable functionality that will be gradually migrated to the new architecture
-// Enable with: cargo build --features full,legacy
-#[cfg(all(feature = "full", feature = "legacy"))]
-pub mod legacy;
+// Artemis Strategy integration
+#[cfg(feature = "full")]
+pub mod strategy;
+
+// Common utilities (always available)
+pub mod utils;
+
+// Legacy modules have been archived to /archived/legacy/
+// They are no longer part of the active codebase
 
 // Entry point modules
 #[cfg(feature = "full")]

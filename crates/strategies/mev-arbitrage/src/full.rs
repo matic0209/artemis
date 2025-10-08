@@ -42,14 +42,12 @@ pub use mev_arbitrage_defense::{
 // We use super:: because these modules are siblings, not children
 pub use super::abstractions;
 pub use super::component_factory;
-pub use super::unified_arbitrage_manager;
-pub use super::event_system;
-pub use super::gas_strategy;
-pub use super::z3_optimizer;
-// TODO: Temporarily disabled - need to fix dependencies
-// pub use super::mev_orchestrator;
-// pub use super::mev_pipeline;
-// pub use super::hybrid_arbitrage_engine;
+pub use super::coordination;
+pub use super::execution;
+pub use super::optimizers;
+pub use super::strategies;
+pub use super::detectors;
+pub use super::validators;
 
 // Key type re-exports for convenience
 pub use abstractions::{
@@ -60,24 +58,44 @@ pub use abstractions::{
 };
 
 pub use component_factory::ArbitrageComponentFactory;
-pub use unified_arbitrage_manager::{UnifiedArbitrageManager, ManagerConfig, ArbitrageResult};
+pub use coordination::unified_manager::{UnifiedArbitrageManager, ManagerConfig, ArbitrageResult};
 
 // Event system re-exports
-pub use event_system::{
+pub use coordination::event_system::{
     MEVEvent, MEVAction, ExecutionPriority, EventPriority,
     ExecutionStep, EventRouter,
 };
 
 // Gas strategy re-exports
-pub use gas_strategy::{
+pub use execution::gas_strategy::{
     GasStrategy, GasPrice, NetworkConditions,
     GasEstimator, GasOptimizer,
 };
 
-// Z3 optimizer re-exports
-pub use z3_optimizer::{
-    Z3ArbitrageOptimizer, Z3OptimizerConfig, Z3OptimizerStats,
+// Strategy optimizer re-exports (moved from optimizers to strategies)
+pub use strategies::{
+    Z3StrategyOptimizer,
+    Z3ArbitrageOptimizer, // Legacy alias
+};
+
+// Keep optimizers module for other optimizers
+pub use optimizers::z3::{
+    Z3OptimizerConfig,
+    Z3OptimizerStats,
     SimpleOptimizer,
+};
+
+// Detector re-exports
+pub use detectors::{
+    FastArbitrageDetector,
+    EnhancedArbitrageDetector,
+    SymbolicDetector,
+    Z3Cache,
+};
+
+// Validator re-exports
+pub use validators::{
+    REVMValidator,
 };
 
 // Artemis core type aliases

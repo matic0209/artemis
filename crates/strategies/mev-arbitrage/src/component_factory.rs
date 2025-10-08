@@ -66,6 +66,10 @@ impl ArbitrageComponentFactory {
             Ok(Box::new(MEVIntegratedDetector::new(config.clone())?))
         }));
 
+        self.register_detector("symbolic", Box::new(|config| {
+            Ok(Box::new(SymbolicDetectorWrapper::new(config.clone())?))
+        }));
+
         // Register explorers
         self.register_explorer("symbolic", Box::new(|config| {
             Ok(Box::new(SymbolicPathExplorer::new(config.clone())?))
@@ -76,12 +80,8 @@ impl ArbitrageComponentFactory {
         }));
 
         // Register validators
-        self.register_validator("hybrid", Box::new(|config| {
-            Ok(Box::new(HybridValidatorWrapper::new(config.clone())?))
-        }));
-
-        self.register_validator("symbolic", Box::new(|config| {
-            Ok(Box::new(SymbolicValidatorWrapper::new(config.clone())?))
+        self.register_validator("revm", Box::new(|config| {
+            Ok(Box::new(REVMValidatorWrapper::new(config.clone())?))
         }));
 
         self.register_validator("economic", Box::new(|config| {
@@ -197,13 +197,13 @@ impl ArbitrageComponentFactory {
 
 /// Wrapper for enhanced graph detector
 pub struct EnhancedGraphDetector {
-    inner: crate::enhanced_arbitrage_detector::EnhancedArbitrageDetector,
+    inner: crate::detectors::enhanced::EnhancedArbitrageDetector,
     config: DetectorConfig,
 }
 
 impl EnhancedGraphDetector {
     pub fn new(config: DetectorConfig) -> Result<Self> {
-        use crate::enhanced_arbitrage_detector::EnhancedArbitrageDetector;
+        use crate::detectors::enhanced::EnhancedArbitrageDetector;
         let inner = EnhancedArbitrageDetector::new(Default::default());
         Ok(Self { inner, config })
     }
@@ -462,6 +462,54 @@ impl MEVIntegratedDetector { pub fn new(config: DetectorConfig) -> Result<Self> 
     async fn health_check(&self) -> Result<HealthStatus> { todo!() }
 }
 
+/// Wrapper for symbolic detector (Z3-based detection)
+pub struct SymbolicDetectorWrapper {
+    inner: crate::detectors::symbolic::SymbolicDetector,
+    config: DetectorConfig,
+}
+
+impl SymbolicDetectorWrapper {
+    pub fn new(config: DetectorConfig) -> Result<Self> {
+        use crate::detectors::symbolic::{SymbolicDetector, SymbolicDetectorConfig};
+
+        let symbolic_config = SymbolicDetectorConfig {
+            min_profit_threshold: alloy_primitives::U256::from(10_000_000_000_000_000u64),
+            max_gas_cost: 500_000,
+            confidence_threshold: config.confidence_threshold,
+            max_opportunities: config.max_opportunities,
+            timeout: config.timeout,
+            ..Default::default()
+        };
+
+        let inner = SymbolicDetector::new(symbolic_config);
+        Ok(Self { inner, config })
+    }
+}
+
+#[async_trait::async_trait]
+impl ArbitrageDetector for SymbolicDetectorWrapper {
+    async fn detect(&mut self, context: &DetectionContext) -> Result<DetectionResult> {
+        self.inner.detect(context).await
+    }
+
+    fn config(&self) -> &DetectorConfig {
+        &self.config
+    }
+
+    fn update_config(&mut self, config: DetectorConfig) -> Result<()> {
+        self.config = config.clone();
+        self.inner.update_config(config)
+    }
+
+    fn metadata(&self) -> DetectorMetadata {
+        self.inner.metadata()
+    }
+
+    async fn health_check(&self) -> Result<HealthStatus> {
+        self.inner.health_check().await
+    }
+}
+
 pub struct SymbolicPathExplorer { config: ExplorerConfig }
 impl SymbolicPathExplorer { pub fn new(config: ExplorerConfig) -> Result<Self> { Ok(Self { config }) } }
 #[async_trait::async_trait] impl PathExplorer for SymbolicPathExplorer {
@@ -470,20 +518,32 @@ impl SymbolicPathExplorer { pub fn new(config: ExplorerConfig) -> Result<Self> {
     fn config(&self) -> &ExplorerConfig { &self.config }
 }
 
-pub struct HybridValidatorWrapper { config: ValidatorConfig }
-impl HybridValidatorWrapper { pub fn new(config: ValidatorConfig) -> Result<Self> { Ok(Self { config }) } }
-#[async_trait::async_trait] impl Validator for HybridValidatorWrapper {
-    async fn validate(&mut self, _plan: &ExecutionPlan, _context: &ValidationContext) -> Result<ValidationResult> { todo!() }
-    fn supported_types(&self) -> Vec<ValidationType> { vec![ValidationType::Symbolic, ValidationType::Concrete] }
-    fn config(&self) -> &ValidatorConfig { &self.config }
+/// Wrapper for REVM validator (fork-based concrete validation)
+pub struct REVMValidatorWrapper {
+    inner: crate::validators::revm::REVMValidator,
+    config: ValidatorConfig,
 }
 
-pub struct SymbolicValidatorWrapper { config: ValidatorConfig }
-impl SymbolicValidatorWrapper { pub fn new(config: ValidatorConfig) -> Result<Self> { Ok(Self { config }) } }
-#[async_trait::async_trait] impl Validator for SymbolicValidatorWrapper {
-    async fn validate(&mut self, _plan: &ExecutionPlan, _context: &ValidationContext) -> Result<ValidationResult> { todo!() }
-    fn supported_types(&self) -> Vec<ValidationType> { vec![ValidationType::Symbolic] }
-    fn config(&self) -> &ValidatorConfig { &self.config }
+impl REVMValidatorWrapper {
+    pub fn new(config: ValidatorConfig) -> Result<Self> {
+        let inner = crate::validators::revm::REVMValidator::new();
+        Ok(Self { inner, config })
+    }
+}
+
+#[async_trait::async_trait]
+impl Validator for REVMValidatorWrapper {
+    async fn validate(&mut self, plan: &ExecutionPlan, context: &ValidationContext) -> Result<ValidationResult> {
+        self.inner.validate(plan, context).await
+    }
+
+    fn supported_types(&self) -> Vec<ValidationType> {
+        vec![ValidationType::Concrete, ValidationType::Gas]
+    }
+
+    fn config(&self) -> &ValidatorConfig {
+        &self.config
+    }
 }
 
 pub struct EconomicValidator { config: ValidatorConfig }

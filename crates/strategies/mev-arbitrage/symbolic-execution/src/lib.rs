@@ -1,7 +1,9 @@
 //! Complete EVM Interpreter for Symbolic Execution
-//! 
+//!
 //! This module provides the complete EVM interpreter functionality for symbolic execution,
 //! maintaining full compatibility with DeFiAligner's SEVM implementation.
+
+#![allow(dead_code)] // Many fields reserved for full EVM implementation
 
 use alloy_primitives::Address;
 use anyhow::Result;
